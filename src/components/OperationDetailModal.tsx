@@ -1,0 +1,171 @@
+import type { Operation, OperationWithAgent, Profile } from '../lib/supabase'
+import { formatEur, formatDate } from '../lib/calculations'
+
+type Props = {
+  open: boolean
+  operation: OperationWithAgent | null
+  onClose: () => void
+  onEdit: (op: Operation) => void
+  onCloseOp?: (op: Operation) => void
+  onDelete?: (id: string) => void
+}
+
+const sectionLabel = (text: string) => (
+  <div style={{
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: 11,
+    color: 'var(--ld)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    marginBottom: 8,
+  }}>
+    // {text}
+  </div>
+)
+
+const infoRow = (label: string, value: React.ReactNode) => (
+  <div style={{
+    display: 'flex',
+    justifyContent: 'space-between',
+    padding: '8px 0',
+    borderBottom: '1px solid var(--bd)',
+  }}>
+    <span style={{ color: 'var(--g)', fontSize: 13 }}>{label}</span>
+    <span style={{ color: 'var(--w)', fontSize: 13, textAlign: 'right' }}>{value ?? '—'}</span>
+  </div>
+)
+
+export default function OperationDetailModal({ open, operation, onClose, onEdit, onCloseOp, onDelete }: Props) {
+  if (!open || !operation) return null
+
+  const agent = operation.profiles as Profile | undefined
+  const buyerName = [operation.buyer_first_name, operation.buyer_last_name].filter(Boolean).join(' ') || null
+  const collaboratorName = [operation.collaborator_first_name, operation.collaborator_last_name].filter(Boolean).join(' ') || operation.collaborator_name || null
+  const mapsUrl = operation.address
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(operation.address)}`
+    : null
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto', maxWidth: 560 }}>
+        {/* Header */}
+        <div className="modal-title" style={{ marginBottom: 4 }}>{operation.property_name}</div>
+        {operation.address && (
+          <a
+            href={mapsUrl!}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: 'var(--teal)', fontSize: 13, textDecoration: 'none', display: 'block', marginBottom: 16 }}
+          >
+            {operation.address} ↗
+          </a>
+        )}
+
+        {/* Badges */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
+          <span className={`badge badge-${operation.type}`}>{operation.type}</span>
+          <span className={`badge badge-${operation.origin}`}>{operation.origin}</span>
+          <span className={`badge badge-${operation.status}`}>{operation.status}</span>
+        </div>
+
+        {/* Agente */}
+        {sectionLabel('Agente')}
+        {agent && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <div
+              className="avatar"
+              style={{ backgroundColor: agent.color, width: 36, height: 36, fontSize: 13 }}
+            >
+              {agent.initials}
+            </div>
+            <span style={{ color: 'var(--w)', fontSize: 14 }}>{agent.full_name}</span>
+          </div>
+        )}
+
+        {/* Acquirente */}
+        {sectionLabel('Acquirente')}
+        {infoRow('Nome acquirente', buyerName)}
+
+        {/* Valori */}
+        {sectionLabel('Valori Immobile')}
+        {infoRow('Valore immobile', operation.property_value != null ? formatEur(operation.property_value) : null)}
+        {infoRow('Valore finale', operation.final_value != null ? formatEur(operation.final_value) : null)}
+
+        {/* Commissioni */}
+        <div style={{ marginTop: 16 }}>
+          {sectionLabel('Commissioni')}
+          {infoRow('Commissione lorda', operation.gross_commission != null ? formatEur(operation.gross_commission) : null)}
+          {infoRow(
+            'Comm. venditore',
+            operation.comm_mode_seller === 'fixed'
+              ? formatEur(operation.comm_fixed_seller)
+              : `${operation.comm_pct_seller}%`
+          )}
+          {infoRow(
+            'Comm. acquirente',
+            operation.comm_mode_buyer === 'fixed'
+              ? formatEur(operation.comm_fixed_buyer)
+              : `${operation.comm_pct_buyer}%`
+          )}
+          {infoRow('Provvigione agente', operation.agent_commission != null ? formatEur(operation.agent_commission) : null)}
+          {infoRow('Provvigione collaboratore', operation.collaborator_commission != null ? (
+            <>
+              {formatEur(operation.collaborator_commission)}
+              {collaboratorName && <span style={{ color: 'var(--g)', marginLeft: 6, fontSize: 11 }}>({collaboratorName})</span>}
+            </>
+          ) : null)}
+          {infoRow('Ricavo agenzia', operation.gross_commission != null && operation.agent_commission != null
+            ? formatEur(operation.gross_commission - operation.agent_commission - (operation.collaborator_commission || 0))
+            : null
+          )}
+        </div>
+
+        {/* Incarico */}
+        <div style={{ marginTop: 16 }}>
+          {sectionLabel('Incarico')}
+          {infoRow('Data inizio incarico', operation.mandate_start_date ? formatDate(operation.mandate_start_date) : null)}
+          {infoRow('Data fine incarico', operation.mandate_end_date ? formatDate(operation.mandate_end_date) : null)}
+          {infoRow('Data vendita', operation.sale_date ? formatDate(operation.sale_date) : null)}
+        </div>
+
+        {/* Incasso */}
+        <div style={{ marginTop: 16 }}>
+          {sectionLabel('Incasso')}
+          {infoRow('Commissione incassata', operation.commission_collected != null ? formatEur(operation.commission_collected) : null)}
+          {infoRow('Data incasso', operation.collection_date ? formatDate(operation.collection_date) : null)}
+        </div>
+
+        {/* Note */}
+        {operation.notes && (
+          <div style={{ marginTop: 16 }}>
+            {sectionLabel('Note')}
+            <div style={{ color: 'var(--gl)', fontSize: 13, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+              {operation.notes}
+            </div>
+          </div>
+        )}
+
+        {/* Azioni */}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--bd)' }}>
+          {onDelete && (
+            <button
+              className="btn btn-danger"
+              onClick={() => onDelete(operation.id)}
+              style={{ marginRight: 'auto' }}
+            >
+              Elimina
+            </button>
+          )}
+          {onCloseOp && operation.status === 'pipeline' && (
+            <button className="btn btn-secondary" onClick={() => onCloseOp(operation)}>
+              Chiudi operazione
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={() => onEdit(operation)}>
+            Modifica
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
