@@ -3,9 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useOperations } from '../hooks/useOperations'
 import { useProfiles } from '../hooks/useProfiles'
 import { useBudgets } from '../hooks/useBudgets'
-import { formatEur, formatDate, calculateCommissions } from '../lib/calculations'
+import { formatEur, formatDate, estimatePipelineCommission, getPipelineWeight, PIPELINE_FORMULAS } from '../lib/calculations'
 import KpiCard from '../components/KpiCard'
 import OperationDetailModal from '../components/OperationDetailModal'
+import FormulaTip from '../components/FormulaTip'
 import type { OperationWithAgent } from '../lib/supabase'
 
 export default function AdminAgentDetail() {
@@ -51,46 +52,25 @@ export default function AdminAgentDetail() {
   const agencyMargin = totalGross - totalAgent
   const totalValue = completedYear.reduce((s, o) => s + (o.final_value || o.property_value || 0), 0)
 
-  // Pipeline estimated KPIs
-  const getEstimated = (op: OperationWithAgent) => {
-    if (!agent || !op.property_value) return null
-    return calculateCommissions(
-      op.property_value, op.comm_pct_seller, op.comm_pct_buyer, op.origin,
-      agent.comm_pct_agency, agent.comm_pct_agent,
-      {
-        commModeSeller: op.comm_mode_seller || 'pct',
-        commModeBuyer: op.comm_mode_buyer || 'pct',
-        commFixedSeller: op.comm_fixed_seller || 0,
-        commFixedBuyer: op.comm_fixed_buyer || 0,
-        collaboratorCommPct: op.collaborator_comm_pct || 0,
-      }
-    )
-  }
+  // Pipeline estimated KPIs (central helper: handles fixed-mode + collaborator share)
+  const getEstimated = (op: OperationWithAgent) => estimatePipelineCommission(op, agent)
 
   const pipelineValue = pipelineOps.reduce((s, o) => s + (o.property_value || 0), 0)
-  const pipelineEstGross = pipelineOps.reduce((s, o) => {
-    const est = getEstimated(o)
-    return s + (est?.grossCommission || 0)
-  }, 0)
-  const pipelineEstAgent = pipelineOps.reduce((s, o) => {
-    const est = getEstimated(o)
-    return s + (est?.agentCommission || 0)
-  }, 0)
-  const pipelineEstAgency = pipelineOps.reduce((s, o) => {
-    const est = getEstimated(o)
-    return s + (est?.agencyRevenue || 0)
-  }, 0)
+  const pipelineEstGross = pipelineOps.reduce((s, o) => s + (getEstimated(o)?.grossCommission || 0), 0)
+  const pipelineEstAgent = pipelineOps.reduce((s, o) => s + (getEstimated(o)?.agentCommission || 0), 0)
+  const pipelineEstAgency = pipelineOps.reduce((s, o) => s + (getEstimated(o)?.agencyRevenue || 0), 0)
+  // Weighted: null probability → 50% fallback (consistent with app)
   const pipelineWeightedGross = pipelineOps.reduce((s, o) => {
     const est = getEstimated(o)
-    return s + (est ? est.grossCommission * ((o.sale_probability || 100) / 100) : 0)
+    return s + (est ? est.grossCommission * getPipelineWeight(o) : 0)
   }, 0)
   const pipelineWeightedAgent = pipelineOps.reduce((s, o) => {
     const est = getEstimated(o)
-    return s + (est ? est.agentCommission * ((o.sale_probability || 100) / 100) : 0)
+    return s + (est ? est.agentCommission * getPipelineWeight(o) : 0)
   }, 0)
   const pipelineWeightedAgency = pipelineOps.reduce((s, o) => {
     const est = getEstimated(o)
-    return s + (est ? est.agencyRevenue * ((o.sale_probability || 100) / 100) : 0)
+    return s + (est ? est.agencyRevenue * getPipelineWeight(o) : 0)
   }, 0)
 
   // Closing rate (year-based: closed in year / (closed + pipeline))
@@ -221,8 +201,15 @@ export default function AdminAgentDetail() {
 
           {/* Pipeline Stimate */}
           <div style={{ background: 'var(--s1)', borderRadius: 12, padding: 16, border: '1px solid var(--bd)' }}>
-            <div style={{ ...mono, fontSize: 11, color: 'var(--ld)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 12 }}>
-              // Pipeline Stime
+            <div style={{ ...mono, fontSize: 11, color: 'var(--ld)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 12, display: 'flex', alignItems: 'center' }}>
+              <span>// Pipeline Stime</span>
+              <FormulaTip title="Pipeline Stime"
+                formula={<>
+                  <div><b>Comm. lorde stimate</b>: {PIPELINE_FORMULAS.pipelineGross}</div>
+                  <div style={{ marginTop: 4 }}><b>Quota agente</b>: {PIPELINE_FORMULAS.agentShare}</div>
+                  <div style={{ marginTop: 4 }}><b>Margine agenzia</b>: {PIPELINE_FORMULAS.agencyMargin}</div>
+                </>}
+                note="Include modalità fissa/% e quote collaboratori." />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 12 }}>
               <div>
@@ -244,7 +231,12 @@ export default function AdminAgentDetail() {
             </div>
             {pipelineWeightedGross !== pipelineEstGross && (
               <div style={{ borderTop: '1px solid var(--bd)', marginTop: 10, paddingTop: 8 }}>
-                <div style={{ fontSize: 10, color: 'var(--g)', textTransform: 'uppercase', marginBottom: 6, letterSpacing: '0.3px' }}>Pesato per probabilità</div>
+                <div style={{ fontSize: 10, color: 'var(--g)', textTransform: 'uppercase', marginBottom: 6, letterSpacing: '0.3px', display: 'inline-flex', alignItems: 'center' }}>
+                  <span>Pesato per probabilità</span>
+                  <FormulaTip title="Pipeline pesata per probabilità"
+                    formula={PIPELINE_FORMULAS.pipelineWeighted}
+                    note={PIPELINE_FORMULAS.weight} />
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, fontSize: 12 }}>
                   <div>
                     <div style={{ color: 'var(--g)', marginBottom: 2 }}>Comm. lorde</div>

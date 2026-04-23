@@ -2,7 +2,8 @@ import { useState, useMemo } from 'react'
 import { useOperations } from '../hooks/useOperations'
 import { useProfiles } from '../hooks/useProfiles'
 import { useValuations } from '../hooks/useValuations'
-import { formatEur } from '../lib/calculations'
+import { formatEur, PIPELINE_FORMULAS } from '../lib/calculations'
+import FormulaTip from '../components/FormulaTip'
 import { calculateProjectedTrajectory } from '../lib/projections'
 import KpiCard from '../components/KpiCard'
 import PriceDistributionChart from '../components/PriceDistributionChart'
@@ -218,11 +219,12 @@ export default function AdminIntelligence() {
     }
   }, [pipeline])
 
+  // Null probability → 50% (PIPELINE_WEIGHT_FALLBACK), consistent with rest of app
   const pipelineWeightedValue =
     pipelineByProb.p30.value * 0.3 +
     pipelineByProb.p60.value * 0.6 +
     pipelineByProb.p90.value * 0.9 +
-    pipelineByProb.none.value
+    pipelineByProb.none.value * 0.5
 
   // Tempo medio in pipeline
   const pipelineDays = pipeline.filter(o => o.date_added).map(o => {
@@ -524,7 +526,7 @@ export default function AdminIntelligence() {
               { label: 'Prob. 30%', ...pipelineByProb.p30, color: 'var(--red)', weight: 0.3 },
               { label: 'Prob. 60%', ...pipelineByProb.p60, color: 'var(--amber)', weight: 0.6 },
               { label: 'Prob. 90%', ...pipelineByProb.p90, color: 'var(--green)', weight: 0.9 },
-              { label: 'Non definita', ...pipelineByProb.none, color: 'var(--g)', weight: 1 },
+              { label: 'Non definita', ...pipelineByProb.none, color: 'var(--g)', weight: 0.5 },
             ].map(g => (
               <div key={g.label} style={{ background: 'var(--s1)', borderRadius: 12, padding: 16, border: '1px solid var(--bd)' }}>
                 <div style={{ fontSize: 12, color: g.color, fontWeight: 600, marginBottom: 8 }}>{g.label}</div>
@@ -540,7 +542,12 @@ export default function AdminIntelligence() {
               <div style={{ ...mono, fontSize: 18, fontWeight: 700, color: 'var(--w)' }}>{pipeline.length} ops</div>
             </div>
             <div style={{ background: 'var(--s1)', borderRadius: 12, padding: 16, border: '1px solid var(--bd)', textAlign: 'center' }}>
-              <div style={{ fontSize: 11, color: 'var(--g)', textTransform: 'uppercase', marginBottom: 4 }}>Valore pesato prob.</div>
+              <div style={{ fontSize: 11, color: 'var(--g)', textTransform: 'uppercase', marginBottom: 4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span>Valore pesato prob.</span>
+                <FormulaTip title="Valore pesato per probabilità"
+                  formula="Σ (valore_immobile × peso) sulle operazioni in pipeline"
+                  note={PIPELINE_FORMULAS.weight} />
+              </div>
               <div style={{ ...mono, fontSize: 18, fontWeight: 700, color: 'var(--amber)' }}>{formatEur(pipelineWeightedValue)}</div>
             </div>
             <div style={{ background: 'var(--s1)', borderRadius: 12, padding: 16, border: '1px solid var(--bd)', textAlign: 'center' }}>

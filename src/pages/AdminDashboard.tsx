@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useOperations } from '../hooks/useOperations'
 import { useProfiles } from '../hooks/useProfiles'
-import { formatEur, formatDate, formatDateTime, calculateCommissions } from '../lib/calculations'
+import { formatEur, formatDate, formatDateTime, estimatePipelineCommission, getPipelineWeight, PIPELINE_FORMULAS } from '../lib/calculations'
 import { exportCsv } from '../lib/exportCsv'
 import KpiCard from '../components/KpiCard'
 import MonthlyChart from '../components/MonthlyChart'
@@ -12,6 +12,7 @@ import YearComparisonChart from '../components/YearComparisonChart'
 import YearComparisonSummary from '../components/YearComparisonSummary'
 import OperationDetailModal from '../components/OperationDetailModal'
 import AgentProfileModal from '../components/AgentProfileModal'
+import FormulaTip from '../components/FormulaTip'
 import type { OperationWithAgent, Profile } from '../lib/supabase'
 
 export default function AdminDashboard() {
@@ -49,22 +50,13 @@ export default function AdminDashboard() {
   const totalAgentYear = completedYear.reduce((s, o) => s + (o.agent_commission || 0), 0)
   const marginYear = totalGrossYear - totalAgentYear
 
-  // Pipeline commission estimates: raw + weighted by sale_probability (fallback 50% if null)
+  // Pipeline commission estimates: raw + weighted by sale_probability (null → 50% fallback)
   const pipelineCommEstimates = pipeline.map(op => {
     const agent = agents.find(a => a.id === op.agent_id)
-    if (!agent || !op.property_value) {
-      return { agentId: op.agent_id, gross: 0, weight: 0, weightedGross: 0 }
-    }
-    const opts = {
-      commModeSeller: op.comm_mode_seller || ('pct' as const),
-      commModeBuyer: op.comm_mode_buyer || ('pct' as const),
-      commFixedSeller: op.comm_fixed_seller || 0,
-      commFixedBuyer: op.comm_fixed_buyer || 0,
-      collaboratorCommPct: op.collaborator_comm_pct || 0,
-    }
-    const r = calculateCommissions(op.property_value, op.comm_pct_seller, op.comm_pct_buyer, op.origin, agent.comm_pct_agency, agent.comm_pct_agent, opts)
-    const weight = op.sale_probability != null ? op.sale_probability / 100 : 0.5
-    return { agentId: op.agent_id, gross: r.grossCommission, weight, weightedGross: r.grossCommission * weight }
+    const r = estimatePipelineCommission(op, agent)
+    const weight = getPipelineWeight(op)
+    const gross = r?.grossCommission || 0
+    return { agentId: op.agent_id, gross, weight, weightedGross: gross * weight }
   })
 
   const pipelineExpectedGross = pipelineCommEstimates.reduce((s, e) => s + e.gross, 0)
@@ -157,12 +149,21 @@ export default function AdminDashboard() {
           onClick={() => { setFStatus('completata'); setFPeriod('year') }} />
         <KpiCard value={pipeline.length.toString()} label="Ops Pipeline" loading={loading} color="amber"
           onClick={() => { setFStatus('pipeline'); setFPeriod('') }} />
-        <KpiCard value={formatEur(totalGrossYear)} label="Comm. Totali" loading={loading} />
-        <KpiCard value={formatEur(totalAgentYear)} label="Comm. Agenti" loading={loading} color="teal" />
-        <KpiCard value={formatEur(marginYear)} label="Margine Agenzia" loading={loading} color="green" />
-        <KpiCard value={formatEur(pipelineExpectedGross)} label="Comm. Stimate Pipeline" loading={loading} color="amber" />
-        <KpiCard value={formatEur(estimatedTotalYear)} label={`Stima Tot. ${selectedYear} (chiuse + pipeline)`} loading={loading} color="green" />
-        <KpiCard value={formatEur(estimatedWeightedYear)} label={`Stima Pesata ${selectedYear} (chiuse + pipeline × prob.)`} loading={loading} color="teal" />
+        <KpiCard value={formatEur(totalGrossYear)} label="Comm. Totali" loading={loading}
+          legend={<FormulaTip title="Comm. Totali" formula={`Somma di gross_commission delle operazioni completate nel ${selectedYear}`} />} />
+        <KpiCard value={formatEur(totalAgentYear)} label="Comm. Agenti" loading={loading} color="teal"
+          legend={<FormulaTip title="Comm. Agenti" formula={`Somma di agent_commission delle operazioni completate nel ${selectedYear}`} />} />
+        <KpiCard value={formatEur(marginYear)} label="Margine Agenzia" loading={loading} color="green"
+          legend={<FormulaTip title="Margine Agenzia" formula="Comm. Totali - Comm. Agenti" note={PIPELINE_FORMULAS.agencyMargin} />} />
+        <KpiCard value={formatEur(pipelineExpectedGross)} label="Comm. Stimate Pipeline" loading={loading} color="amber"
+          legend={<FormulaTip title="Comm. Stimate Pipeline" formula={PIPELINE_FORMULAS.pipelineGross}
+            note="Include modalità fissa/% e quote collaboratori." />} />
+        <KpiCard value={formatEur(estimatedTotalYear)} label={`Stima Tot. ${selectedYear}`} loading={loading} color="green"
+          legend={<FormulaTip title={`Stima Tot. ${selectedYear}`} formula={PIPELINE_FORMULAS.estimatedTotal}
+            note="Scenario ottimistico: tutta la pipeline chiude entro l'anno." />} />
+        <KpiCard value={formatEur(estimatedWeightedYear)} label={`Stima Pesata ${selectedYear}`} loading={loading} color="teal"
+          legend={<FormulaTip title={`Stima Pesata ${selectedYear}`} formula={PIPELINE_FORMULAS.estimatedWeighted}
+            note={PIPELINE_FORMULAS.weight} />} />
       </div>
 
       {/* Budget */}
@@ -173,7 +174,19 @@ export default function AdminDashboard() {
       <div className="table-wrap" style={{ marginBottom: 24 }}>
         <table>
           <thead>
-            <tr><th>Agente</th><th>Chiuse</th><th>Pipeline</th><th>Comm. Totali</th><th>Quota Agente</th><th>Quota Agenzia</th><th>Pipeline (tot.)</th><th>Pipeline Pesata</th><th>Stima Tot.</th><th>Stima Pesata</th><th>% Chiusura</th></tr>
+            <tr>
+              <th>Agente</th>
+              <th>Chiuse</th>
+              <th>Pipeline</th>
+              <th>Comm. Totali<FormulaTip title="Comm. Totali" formula="Somma gross_commission delle operazioni chiuse dell'agente nell'anno selezionato" align="center" /></th>
+              <th>Quota Agente<FormulaTip title="Quota Agente" formula="Somma agent_commission delle operazioni chiuse dell'agente nell'anno" align="center" /></th>
+              <th>Quota Agenzia<FormulaTip title="Quota Agenzia" formula="Comm. Totali - Quota Agente" align="center" /></th>
+              <th>Pipeline (tot.)<FormulaTip title="Pipeline (tot.)" formula={PIPELINE_FORMULAS.pipelineGross} align="center" /></th>
+              <th>Pipeline Pesata<FormulaTip title="Pipeline Pesata" formula={PIPELINE_FORMULAS.pipelineWeighted} note={PIPELINE_FORMULAS.weight} align="center" /></th>
+              <th>Stima Tot.<FormulaTip title="Stima Tot." formula={PIPELINE_FORMULAS.estimatedTotal} align="center" /></th>
+              <th>Stima Pesata<FormulaTip title="Stima Pesata" formula={PIPELINE_FORMULAS.estimatedWeighted} note={PIPELINE_FORMULAS.weight} align="center" /></th>
+              <th>% Chiusura<FormulaTip title="% Chiusura" formula="Chiuse anno / (Chiuse anno + Pipeline) × 100" align="right" /></th>
+            </tr>
           </thead>
           <tbody>
             {loading ? (
@@ -219,10 +232,7 @@ export default function AdminDashboard() {
           </tbody>
         </table>
         <p style={{ fontSize: 11, color: 'var(--g)', marginTop: 8 }}>
-          * <b>Pipeline (tot.)</b> = somma delle commissioni lorde di tutte le operazioni in pipeline (senza pesi).
-          <b> Pipeline Pesata</b> = ciascuna operazione × probabilità di vendita (30% / 60% / 90%; 50% se non specificata).
-          <b> Stima Tot.</b> = Comm. Totali chiuse {selectedYear} + Pipeline (tot.).
-          <b> Stima Pesata</b> = Comm. Totali chiuse {selectedYear} + Pipeline Pesata.
+          Passa sopra le icone <i style={{ fontFamily: 'serif' }}>i</i> nelle intestazioni per vedere le formule usate.
         </p>
       </div>
 

@@ -1,5 +1,5 @@
 import type { Operation, Profile } from './supabase'
-import { calculateCommissions } from './calculations'
+import { estimatePipelineCommission, getPipelineWeight } from './calculations'
 
 export interface MonthlyProjection {
   month: number
@@ -61,20 +61,16 @@ export function calculateProjectedTrajectory(
     : 0
 
   // Pipeline expected value — WEIGHTED BY SALE PROBABILITY
+  // Uses central estimatePipelineCommission (handles fixed-mode + collaborator share).
+  // Null probability → 50% fallback (consistent with rest of app).
   let pipelineGrossTotal = 0
   let pipelineWeightedByProb = 0
   pipelineOps.forEach(op => {
-    if (!op.property_value) return
     const agent = agents.find(a => a.id === op.agent_id)
-    if (!agent) return
-    const result = calculateCommissions(
-      op.property_value, op.comm_pct_seller, op.comm_pct_buyer,
-      op.origin, agent.comm_pct_agency, agent.comm_pct_agent
-    )
+    const result = estimatePipelineCommission(op, agent)
+    if (!result) return
     pipelineGrossTotal += result.grossCommission
-    // Weight by probability: 30%→0.3, 60%→0.6, 90%→0.9, null→closeRate
-    const probWeight = op.sale_probability ? op.sale_probability / 100 : closeRate
-    pipelineWeightedByProb += result.grossCommission * probWeight
+    pipelineWeightedByProb += result.grossCommission * getPipelineWeight(op)
   })
 
   const remainingMonths = Math.max(11 - currentMonth, 1)

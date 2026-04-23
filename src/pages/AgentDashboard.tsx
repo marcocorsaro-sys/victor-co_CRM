@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import type { Profile, Operation } from '../lib/supabase'
 import { useOperations } from '../hooks/useOperations'
-import { formatEur, calculateCommissions } from '../lib/calculations'
+import { formatEur, estimatePipelineCommission, getPipelineWeight, PIPELINE_FORMULAS } from '../lib/calculations'
 import KpiCard from '../components/KpiCard'
 import OpCard from '../components/OpCard'
 import OpModal from '../components/OpModal'
 import CloseModal from '../components/CloseModal'
 import ToastContainer from '../components/ToastContainer'
+import FormulaTip from '../components/FormulaTip'
 import { useToast } from '../hooks/useToast'
 
 type Props = {
@@ -35,24 +36,24 @@ export default function AgentDashboard({ profile }: Props) {
   const totalCommissions = completedYear.reduce((s, o) => s + (o.agent_commission || 0), 0)
   const pipelineValue = pipeline.reduce((s, o) => s + (o.property_value || 0), 0)
 
-  // Expected agent commissions from pipeline
+  // Expected agent commissions from pipeline (includes fixed-mode + collaborator)
   const pipelineExpectedAgent = pipeline.reduce((s, op) => {
-    if (!op.property_value) return s
-    const r = calculateCommissions(op.property_value, op.comm_pct_seller, op.comm_pct_buyer, op.origin, profile.comm_pct_agency, profile.comm_pct_agent)
-    return s + r.agentCommission
+    const r = estimatePipelineCommission(op, profile)
+    return s + (r?.agentCommission || 0)
   }, 0)
 
-  // Weighted by probability
+  // Weighted by sale_probability (null → 50% fallback, consistent with app)
   const pipelineWeightedAgent = pipeline.reduce((s, op) => {
-    if (!op.property_value) return s
-    const r = calculateCommissions(op.property_value, op.comm_pct_seller, op.comm_pct_buyer, op.origin, profile.comm_pct_agency, profile.comm_pct_agent)
-    return s + r.agentCommission * ((op.sale_probability || 100) / 100)
+    const r = estimatePipelineCommission(op, profile)
+    return s + (r ? r.agentCommission * getPipelineWeight(op) : 0)
   }, 0)
+
+  const estimatedTotalYear = totalCommissions + pipelineExpectedAgent
+  const estimatedWeightedYear = totalCommissions + pipelineWeightedAgent
 
   const getExpectedCommission = (op: Operation) => {
-    if (!op.property_value) return undefined
-    const r = calculateCommissions(op.property_value, op.comm_pct_seller, op.comm_pct_buyer, op.origin, profile.comm_pct_agency, profile.comm_pct_agent)
-    return r.agentCommission
+    const r = estimatePipelineCommission(op, profile)
+    return r?.agentCommission
   }
 
   const handleAddOp = async (data: Partial<Operation>) => {
@@ -120,12 +121,26 @@ export default function AgentDashboard({ profile }: Props) {
       <div className="kpi-grid">
         <KpiCard value={pipeline.length.toString()} label="In Pipeline" loading={loading} />
         <KpiCard value={completedYear.length.toString()} label={`Chiuse ${selectedYear}`} loading={loading} color="green" />
-        <KpiCard value={formatEur(totalCommissions)} label="Provvigioni maturate" loading={loading} color="teal" />
-        <KpiCard value={formatEur(pipelineValue)} label="Valore pipeline" loading={loading} color="amber" />
-        <KpiCard value={formatEur(pipelineExpectedAgent)} label="Comm. stimate pipeline" loading={loading} color="amber" />
-        {pipelineWeightedAgent !== pipelineExpectedAgent && (
-          <KpiCard value={formatEur(pipelineWeightedAgent)} label="Comm. pesate prob." loading={loading} color="green" />
-        )}
+        <KpiCard value={formatEur(totalCommissions)} label="Provvigioni maturate" loading={loading} color="teal"
+          legend={<FormulaTip title="Provvigioni maturate" formula={`Somma delle quote agente delle operazioni chiuse nel ${selectedYear}`} />} />
+        <KpiCard value={formatEur(pipelineValue)} label="Valore pipeline" loading={loading} color="amber"
+          legend={<FormulaTip title="Valore pipeline" formula="Somma del property_value di tutte le operazioni in pipeline" />} />
+        <KpiCard value={formatEur(pipelineExpectedAgent)} label="Comm. stimate pipeline" loading={loading} color="amber"
+          legend={<FormulaTip title="Comm. stimate pipeline (quota agente)"
+            formula="Σ quota_agente(op) per ogni operazione in pipeline, senza pesi"
+            note="Include modalità fissa/% e quote collaboratori." />} />
+        <KpiCard value={formatEur(pipelineWeightedAgent)} label="Comm. pesate prob." loading={loading} color="teal"
+          legend={<FormulaTip title="Comm. pipeline pesate (quota agente)"
+            formula={PIPELINE_FORMULAS.pipelineWeighted.replace('Comm. lorda', 'Quota agente')}
+            note={PIPELINE_FORMULAS.weight} />} />
+        <KpiCard value={formatEur(estimatedTotalYear)} label={`Stima Tot. ${selectedYear}`} loading={loading} color="green"
+          legend={<FormulaTip title={`Stima Tot. ${selectedYear} (quota agente)`}
+            formula={`Provvigioni maturate ${selectedYear} + Comm. stimate pipeline (quota agente)`}
+            note="Scenario ottimistico: tutta la pipeline chiude." />} />
+        <KpiCard value={formatEur(estimatedWeightedYear)} label={`Stima Pesata ${selectedYear}`} loading={loading} color="teal"
+          legend={<FormulaTip title={`Stima Pesata ${selectedYear} (quota agente)`}
+            formula={`Provvigioni maturate ${selectedYear} + Comm. pipeline pesate`}
+            note="Scenario realistico ponderato per probabilità di vendita." />} />
       </div>
 
       <div className="tabs">

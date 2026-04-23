@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import type { Operation, OperationWithAgent, Profile } from '../lib/supabase'
 import { useOperations } from '../hooks/useOperations'
 import { useProfiles } from '../hooks/useProfiles'
-import { formatEur, formatDate, formatDateTime, calculateCommissions } from '../lib/calculations'
+import { formatEur, formatDate, formatDateTime, estimatePipelineCommission, getPipelineWeight, PIPELINE_FORMULAS } from '../lib/calculations'
+import FormulaTip from '../components/FormulaTip'
 import { exportCsv } from '../lib/exportCsv'
 import OpModal from '../components/OpModal'
 import CloseModal from '../components/CloseModal'
@@ -63,21 +64,10 @@ export default function AdminOperations() {
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
-  // Compute estimated commissions for pipeline operations
+  // Compute estimated commissions for pipeline operations (central helper)
   const getEstimated = (op: OperationWithAgent) => {
     const agent = agents.find(a => a.id === op.agent_id)
-    if (!agent || !op.property_value) return null
-    return calculateCommissions(
-      op.property_value, op.comm_pct_seller, op.comm_pct_buyer, op.origin,
-      agent.comm_pct_agency, agent.comm_pct_agent,
-      {
-        commModeSeller: op.comm_mode_seller || 'pct',
-        commModeBuyer: op.comm_mode_buyer || 'pct',
-        commFixedSeller: op.comm_fixed_seller || 0,
-        commFixedBuyer: op.comm_fixed_buyer || 0,
-        collaboratorCommPct: op.collaborator_comm_pct || 0,
-      }
-    )
+    return estimatePipelineCommission(op, agent)
   }
 
   // Pipeline totals from filtered operations
@@ -94,7 +84,7 @@ export default function AdminOperations() {
         gross += est.grossCommission
         agentComm += est.agentCommission
         agencyRev += est.agencyRevenue
-        const w = (op.sale_probability || 100) / 100
+        const w = getPipelineWeight(op)
         weightedGross += est.grossCommission * w
         weightedAgentComm += est.agentCommission * w
         weightedAgencyRev += est.agencyRevenue * w
@@ -236,21 +226,35 @@ export default function AdminOperations() {
                 <div style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--w)', fontWeight: 600 }}>{formatEur(pipelineTotals.value)}</div>
               </div>
               <div>
-                <div style={{ color: 'var(--g)', marginBottom: 2 }}>Comm. lorde stimate</div>
+                <div style={{ color: 'var(--g)', marginBottom: 2, display: 'inline-flex', alignItems: 'center' }}>
+                  <span>Comm. lorde stimate</span>
+                  <FormulaTip title="Comm. lorde stimate" formula={PIPELINE_FORMULAS.pipelineGross} />
+                </div>
                 <div style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--amber)', fontWeight: 600 }}>{formatEur(pipelineTotals.gross)}</div>
               </div>
               <div>
-                <div style={{ color: 'var(--g)', marginBottom: 2 }}>Quota agenti stimata</div>
+                <div style={{ color: 'var(--g)', marginBottom: 2, display: 'inline-flex', alignItems: 'center' }}>
+                  <span>Quota agenti stimata</span>
+                  <FormulaTip title="Quota agenti stimata" formula={PIPELINE_FORMULAS.agentShare} />
+                </div>
                 <div style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--teal)', fontWeight: 600 }}>{formatEur(pipelineTotals.agentComm)}</div>
               </div>
               <div>
-                <div style={{ color: 'var(--g)', marginBottom: 2 }}>Margine agenzia stimato</div>
+                <div style={{ color: 'var(--g)', marginBottom: 2, display: 'inline-flex', alignItems: 'center' }}>
+                  <span>Margine agenzia stimato</span>
+                  <FormulaTip title="Margine agenzia stimato" formula={PIPELINE_FORMULAS.agencyMargin} />
+                </div>
                 <div style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--green)', fontWeight: 600 }}>{formatEur(pipelineTotals.agencyRev)}</div>
               </div>
             </div>
             {pipelineTotals.weightedGross !== pipelineTotals.gross && (
               <div style={{ borderTop: '1px solid var(--bd)', marginTop: 10, paddingTop: 8 }}>
-                <div style={{ fontSize: 10, color: 'var(--g)', textTransform: 'uppercase', marginBottom: 6, letterSpacing: '0.3px' }}>Pesato per probabilità</div>
+                <div style={{ fontSize: 10, color: 'var(--g)', textTransform: 'uppercase', marginBottom: 6, letterSpacing: '0.3px', display: 'inline-flex', alignItems: 'center' }}>
+                  <span>Pesato per probabilità</span>
+                  <FormulaTip title="Pesato per probabilità"
+                    formula={PIPELINE_FORMULAS.pipelineWeighted}
+                    note={PIPELINE_FORMULAS.weight} />
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, fontSize: 12 }}>
                   <div>
                     <div style={{ color: 'var(--g)', marginBottom: 2 }}>Comm. lorde</div>
