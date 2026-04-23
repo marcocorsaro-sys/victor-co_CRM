@@ -49,10 +49,12 @@ export default function AdminDashboard() {
   const totalAgentYear = completedYear.reduce((s, o) => s + (o.agent_commission || 0), 0)
   const marginYear = totalGrossYear - totalAgentYear
 
-  const pipelineExpectedGross = pipeline.reduce((s, op) => {
-    if (!op.property_value) return s
+  // Pipeline commission estimates: raw + weighted by sale_probability (fallback 50% if null)
+  const pipelineCommEstimates = pipeline.map(op => {
     const agent = agents.find(a => a.id === op.agent_id)
-    if (!agent) return s
+    if (!agent || !op.property_value) {
+      return { agentId: op.agent_id, gross: 0, weight: 0, weightedGross: 0 }
+    }
     const opts = {
       commModeSeller: op.comm_mode_seller || ('pct' as const),
       commModeBuyer: op.comm_mode_buyer || ('pct' as const),
@@ -61,8 +63,13 @@ export default function AdminDashboard() {
       collaboratorCommPct: op.collaborator_comm_pct || 0,
     }
     const r = calculateCommissions(op.property_value, op.comm_pct_seller, op.comm_pct_buyer, op.origin, agent.comm_pct_agency, agent.comm_pct_agent, opts)
-    return s + r.grossCommission
-  }, 0)
+    const weight = op.sale_probability != null ? op.sale_probability / 100 : 0.5
+    return { agentId: op.agent_id, gross: r.grossCommission, weight, weightedGross: r.grossCommission * weight }
+  })
+
+  const pipelineExpectedGross = pipelineCommEstimates.reduce((s, e) => s + e.gross, 0)
+  const pipelineWeightedGross = pipelineCommEstimates.reduce((s, e) => s + e.weightedGross, 0)
+  const estimatedTotalYear = totalGrossYear + pipelineWeightedGross
 
   const agentPerf = agents.filter(a => a.active).map(agent => {
     const agentOps = operations.filter(o => o.agent_id === agent.id)
@@ -75,7 +82,11 @@ export default function AdminDashboard() {
     const agentComm = agentCompletedYear.reduce((s, o) => s + (o.agent_commission || 0), 0)
     const agencyComm = totalComm - agentComm
     const closingRate = agentOps.length > 0 ? (agentCompletedYear.length / (agentCompletedYear.length + agentPipeline.length)) * 100 : 0
-    return { agent, closed: agentCompletedYear.length, pipeline: agentPipeline.length, totalComm, agentComm, agencyComm, closingRate }
+    const pipelineWeighted = pipelineCommEstimates
+      .filter(e => e.agentId === agent.id)
+      .reduce((s, e) => s + e.weightedGross, 0)
+    const estimatedTotal = totalComm + pipelineWeighted
+    return { agent, closed: agentCompletedYear.length, pipeline: agentPipeline.length, totalComm, agentComm, agencyComm, closingRate, pipelineWeighted, estimatedTotal }
   })
 
   const perfTotals = {
@@ -84,6 +95,8 @@ export default function AdminDashboard() {
     totalComm: agentPerf.reduce((s, p) => s + p.totalComm, 0),
     agentComm: agentPerf.reduce((s, p) => s + p.agentComm, 0),
     agencyComm: agentPerf.reduce((s, p) => s + p.agencyComm, 0),
+    pipelineWeighted: agentPerf.reduce((s, p) => s + p.pipelineWeighted, 0),
+    estimatedTotal: agentPerf.reduce((s, p) => s + p.estimatedTotal, 0),
   }
 
   const filteredOps = operations.filter(o => {
@@ -139,6 +152,7 @@ export default function AdminDashboard() {
         <KpiCard value={formatEur(totalAgentYear)} label="Comm. Agenti" loading={loading} color="teal" />
         <KpiCard value={formatEur(marginYear)} label="Margine Agenzia" loading={loading} color="green" />
         <KpiCard value={formatEur(pipelineExpectedGross)} label="Comm. Stimate Pipeline" loading={loading} color="amber" />
+        <KpiCard value={formatEur(estimatedTotalYear)} label={`Stima Tot. ${selectedYear} (chiuse + pipeline pesata)`} loading={loading} color="green" />
       </div>
 
       {/* Budget */}
@@ -149,11 +163,11 @@ export default function AdminDashboard() {
       <div className="table-wrap" style={{ marginBottom: 24 }}>
         <table>
           <thead>
-            <tr><th>Agente</th><th>Chiuse</th><th>Pipeline</th><th>Comm. Totali</th><th>Quota Agente</th><th>Quota Agenzia</th><th>% Chiusura</th></tr>
+            <tr><th>Agente</th><th>Chiuse</th><th>Pipeline</th><th>Comm. Totali</th><th>Quota Agente</th><th>Quota Agenzia</th><th>Pipeline Pesata</th><th>Stima Tot.</th><th>% Chiusura</th></tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7}><div className="skeleton skeleton-row" /></td></tr>
+              <tr><td colSpan={9}><div className="skeleton skeleton-row" /></td></tr>
             ) : (
               <>
                 {agentPerf.map(p => (
@@ -171,6 +185,8 @@ export default function AdminDashboard() {
                     <td style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatEur(p.totalComm)}</td>
                     <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--teal)' }}>{formatEur(p.agentComm)}</td>
                     <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--amber)' }}>{formatEur(p.agencyComm)}</td>
+                    <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--amber)' }}>{formatEur(p.pipelineWeighted)}</td>
+                    <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--green)', fontWeight: 600 }}>{formatEur(p.estimatedTotal)}</td>
                     <td>{p.closingRate.toFixed(0)}%</td>
                   </tr>
                 ))}
@@ -180,12 +196,18 @@ export default function AdminDashboard() {
                   <td style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatEur(perfTotals.totalComm)}</td>
                   <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--teal)' }}>{formatEur(perfTotals.agentComm)}</td>
                   <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--amber)' }}>{formatEur(perfTotals.agencyComm)}</td>
+                  <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--amber)' }}>{formatEur(perfTotals.pipelineWeighted)}</td>
+                  <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--green)', fontWeight: 600 }}>{formatEur(perfTotals.estimatedTotal)}</td>
                   <td>—</td>
                 </tr>
               </>
             )}
           </tbody>
         </table>
+        <p style={{ fontSize: 11, color: 'var(--g)', marginTop: 8 }}>
+          * <b>Pipeline Pesata</b> = somma delle commissioni lorde delle operazioni in pipeline moltiplicate per la loro probabilità di vendita (30% / 60% / 90%; 50% se non specificata).
+          <b> Stima Tot.</b> = Comm. Totali chiuse {selectedYear} + Pipeline Pesata.
+        </p>
       </div>
 
       {/* Monthly Chart */}
