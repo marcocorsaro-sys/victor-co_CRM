@@ -69,7 +69,10 @@ export default function AdminDashboard() {
 
   const pipelineExpectedGross = pipelineCommEstimates.reduce((s, e) => s + e.gross, 0)
   const pipelineWeightedGross = pipelineCommEstimates.reduce((s, e) => s + e.weightedGross, 0)
-  const estimatedTotalYear = totalGrossYear + pipelineWeightedGross
+  // Stima totale = chiuse + pipeline intera (scenario ottimistico, tutto chiude)
+  const estimatedTotalYear = totalGrossYear + pipelineExpectedGross
+  // Stima pesata = chiuse + pipeline pesata per sale_probability (scenario realistico)
+  const estimatedWeightedYear = totalGrossYear + pipelineWeightedGross
 
   const agentPerf = agents.filter(a => a.active).map(agent => {
     const agentOps = operations.filter(o => o.agent_id === agent.id)
@@ -82,11 +85,15 @@ export default function AdminDashboard() {
     const agentComm = agentCompletedYear.reduce((s, o) => s + (o.agent_commission || 0), 0)
     const agencyComm = totalComm - agentComm
     const closingRate = agentOps.length > 0 ? (agentCompletedYear.length / (agentCompletedYear.length + agentPipeline.length)) * 100 : 0
+    const pipelineGross = pipelineCommEstimates
+      .filter(e => e.agentId === agent.id)
+      .reduce((s, e) => s + e.gross, 0)
     const pipelineWeighted = pipelineCommEstimates
       .filter(e => e.agentId === agent.id)
       .reduce((s, e) => s + e.weightedGross, 0)
-    const estimatedTotal = totalComm + pipelineWeighted
-    return { agent, closed: agentCompletedYear.length, pipeline: agentPipeline.length, totalComm, agentComm, agencyComm, closingRate, pipelineWeighted, estimatedTotal }
+    const estimatedTotal = totalComm + pipelineGross
+    const estimatedWeighted = totalComm + pipelineWeighted
+    return { agent, closed: agentCompletedYear.length, pipeline: agentPipeline.length, totalComm, agentComm, agencyComm, closingRate, pipelineGross, pipelineWeighted, estimatedTotal, estimatedWeighted }
   })
 
   const perfTotals = {
@@ -95,8 +102,10 @@ export default function AdminDashboard() {
     totalComm: agentPerf.reduce((s, p) => s + p.totalComm, 0),
     agentComm: agentPerf.reduce((s, p) => s + p.agentComm, 0),
     agencyComm: agentPerf.reduce((s, p) => s + p.agencyComm, 0),
+    pipelineGross: agentPerf.reduce((s, p) => s + p.pipelineGross, 0),
     pipelineWeighted: agentPerf.reduce((s, p) => s + p.pipelineWeighted, 0),
     estimatedTotal: agentPerf.reduce((s, p) => s + p.estimatedTotal, 0),
+    estimatedWeighted: agentPerf.reduce((s, p) => s + p.estimatedWeighted, 0),
   }
 
   const filteredOps = operations.filter(o => {
@@ -152,7 +161,8 @@ export default function AdminDashboard() {
         <KpiCard value={formatEur(totalAgentYear)} label="Comm. Agenti" loading={loading} color="teal" />
         <KpiCard value={formatEur(marginYear)} label="Margine Agenzia" loading={loading} color="green" />
         <KpiCard value={formatEur(pipelineExpectedGross)} label="Comm. Stimate Pipeline" loading={loading} color="amber" />
-        <KpiCard value={formatEur(estimatedTotalYear)} label={`Stima Tot. ${selectedYear} (chiuse + pipeline pesata)`} loading={loading} color="green" />
+        <KpiCard value={formatEur(estimatedTotalYear)} label={`Stima Tot. ${selectedYear} (chiuse + pipeline)`} loading={loading} color="green" />
+        <KpiCard value={formatEur(estimatedWeightedYear)} label={`Stima Pesata ${selectedYear} (chiuse + pipeline × prob.)`} loading={loading} color="teal" />
       </div>
 
       {/* Budget */}
@@ -163,11 +173,11 @@ export default function AdminDashboard() {
       <div className="table-wrap" style={{ marginBottom: 24 }}>
         <table>
           <thead>
-            <tr><th>Agente</th><th>Chiuse</th><th>Pipeline</th><th>Comm. Totali</th><th>Quota Agente</th><th>Quota Agenzia</th><th>Pipeline Pesata</th><th>Stima Tot.</th><th>% Chiusura</th></tr>
+            <tr><th>Agente</th><th>Chiuse</th><th>Pipeline</th><th>Comm. Totali</th><th>Quota Agente</th><th>Quota Agenzia</th><th>Pipeline (tot.)</th><th>Pipeline Pesata</th><th>Stima Tot.</th><th>Stima Pesata</th><th>% Chiusura</th></tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={9}><div className="skeleton skeleton-row" /></td></tr>
+              <tr><td colSpan={11}><div className="skeleton skeleton-row" /></td></tr>
             ) : (
               <>
                 {agentPerf.map(p => (
@@ -185,8 +195,10 @@ export default function AdminDashboard() {
                     <td style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatEur(p.totalComm)}</td>
                     <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--teal)' }}>{formatEur(p.agentComm)}</td>
                     <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--amber)' }}>{formatEur(p.agencyComm)}</td>
+                    <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--amber)' }}>{formatEur(p.pipelineGross)}</td>
                     <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--amber)' }}>{formatEur(p.pipelineWeighted)}</td>
                     <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--green)', fontWeight: 600 }}>{formatEur(p.estimatedTotal)}</td>
+                    <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--teal)', fontWeight: 600 }}>{formatEur(p.estimatedWeighted)}</td>
                     <td>{p.closingRate.toFixed(0)}%</td>
                   </tr>
                 ))}
@@ -196,8 +208,10 @@ export default function AdminDashboard() {
                   <td style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatEur(perfTotals.totalComm)}</td>
                   <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--teal)' }}>{formatEur(perfTotals.agentComm)}</td>
                   <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--amber)' }}>{formatEur(perfTotals.agencyComm)}</td>
+                  <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--amber)' }}>{formatEur(perfTotals.pipelineGross)}</td>
                   <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--amber)' }}>{formatEur(perfTotals.pipelineWeighted)}</td>
                   <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--green)', fontWeight: 600 }}>{formatEur(perfTotals.estimatedTotal)}</td>
+                  <td style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--teal)', fontWeight: 600 }}>{formatEur(perfTotals.estimatedWeighted)}</td>
                   <td>—</td>
                 </tr>
               </>
@@ -205,8 +219,10 @@ export default function AdminDashboard() {
           </tbody>
         </table>
         <p style={{ fontSize: 11, color: 'var(--g)', marginTop: 8 }}>
-          * <b>Pipeline Pesata</b> = somma delle commissioni lorde delle operazioni in pipeline moltiplicate per la loro probabilità di vendita (30% / 60% / 90%; 50% se non specificata).
-          <b> Stima Tot.</b> = Comm. Totali chiuse {selectedYear} + Pipeline Pesata.
+          * <b>Pipeline (tot.)</b> = somma delle commissioni lorde di tutte le operazioni in pipeline (senza pesi).
+          <b> Pipeline Pesata</b> = ciascuna operazione × probabilità di vendita (30% / 60% / 90%; 50% se non specificata).
+          <b> Stima Tot.</b> = Comm. Totali chiuse {selectedYear} + Pipeline (tot.).
+          <b> Stima Pesata</b> = Comm. Totali chiuse {selectedYear} + Pipeline Pesata.
         </p>
       </div>
 
