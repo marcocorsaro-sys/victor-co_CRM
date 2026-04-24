@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Profile, Operation } from '../lib/supabase'
 import { useOperations } from '../hooks/useOperations'
+import { useAgentsDirectory } from '../hooks/useAgentsDirectory'
 import { formatEur, estimatePipelineCommission, getPipelineWeight, PIPELINE_FORMULAS } from '../lib/calculations'
 import KpiCard from '../components/KpiCard'
 import OpCard from '../components/OpCard'
@@ -16,6 +17,7 @@ type Props = {
 
 export default function AgentDashboard({ profile }: Props) {
   const { operations, loading, addOperation, updateOperation, deleteOperation } = useOperations(profile.id)
+  const { agents } = useAgentsDirectory()
   const currentYear = new Date().getFullYear()
   const [selectedYear, setSelectedYear] = useState(currentYear)
   const years = Array.from({ length: 5 }, (_, i) => currentYear - 3 + i)
@@ -183,6 +185,7 @@ export default function AgentDashboard({ profile }: Props) {
         initial={editingOp}
         agentId={profile.id}
         agentProfile={profile}
+        agents={agents}
       />
 
       <CloseModal

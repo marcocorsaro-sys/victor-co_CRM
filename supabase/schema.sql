@@ -69,6 +69,36 @@ CREATE POLICY "agent_own_profile"
   ON profiles
   FOR SELECT USING (id = auth.uid());
 
+-- SECURITY DEFINER function: permette agli agent di vedere la directory
+-- degli altri agent attivi per poterli selezionare come collaboratori interni
+-- nelle operazioni condivise. Espone solo i campi safe (no iban/cf/indirizzo/
+-- telefono/contratto).
+CREATE OR REPLACE FUNCTION public.get_agents_directory()
+RETURNS TABLE (
+  id UUID,
+  first_name TEXT,
+  last_name TEXT,
+  full_name TEXT,
+  role TEXT,
+  initials TEXT,
+  color TEXT,
+  active BOOLEAN,
+  comm_pct_agency NUMERIC,
+  comm_pct_agent NUMERIC
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT p.id, p.first_name, p.last_name, p.full_name, p.role, p.initials,
+         p.color, p.active, p.comm_pct_agency, p.comm_pct_agent
+  FROM profiles p
+  WHERE p.role = 'agent' AND p.active = true
+  ORDER BY p.full_name;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_agents_directory() TO authenticated;
+
 CREATE POLICY "admin_all_ops"
   ON operations FOR ALL USING (
     public.get_user_role(auth.uid()) = 'admin'
