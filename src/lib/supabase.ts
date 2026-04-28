@@ -47,6 +47,83 @@ export type Client = {
   linked_agent_id: string | null
   date_added: string
   updated_at: string
+  // Anagrafica estesa per modulistica
+  luogo_nascita: string | null
+  provincia_nascita: string | null
+  nazionalita: string | null
+  professione: string | null
+  codice_fiscale: string | null
+  citta: string | null
+  cap: string | null
+  provincia: string | null
+  // Documento identità
+  documento_tipo: string | null
+  documento_numero: string | null
+  documento_rilasciato_da: string | null
+  documento_rilascio_date: string | null
+  documento_scadenza: string | null
+  // Antiriciclaggio
+  pep: boolean
+  pep_carica: string | null
+  provenienza_fondi: string | null
+  scopo_operazione: string | null
+  scopo_operazione_altro: string | null
+  // Privacy
+  privacy_diffusione_consenso: boolean | null
+  privacy_marketing_consenso: boolean | null
+}
+
+export type AgencySettings = {
+  id: number
+  full_name: string | null
+  sede_legale_via: string | null
+  sede_legale_cap: string | null
+  sede_legale_citta: string | null
+  sede_legale_provincia: string | null
+  sede_operativa_via: string | null
+  sede_operativa_cap: string | null
+  sede_operativa_citta: string | null
+  sede_operativa_provincia: string | null
+  telefono: string | null
+  email: string | null
+  pec: string | null
+  partita_iva: string | null
+  codice_fiscale: string | null
+  camera_commercio: string | null
+  rea: string | null
+  rea_data_iscrizione: string | null
+  rea_protocollo: string | null
+  iscrizione_fiaip: string | null
+  polizza_compagnia: string | null
+  polizza_numero: string | null
+  polizza_scadenza: string | null
+  updated_at: string
+}
+
+export type DocumentTemplateId =
+  | 'antiriciclaggio'
+  | 'privacy'
+  | 'incarico_vendita'
+  | 'proposta_acquisto'
+  | 'dich_provvigionale_acquirente'
+
+export type DocumentParty = 'buyer' | 'seller' | 'agency'
+export type DocumentStatus = 'missing' | 'draft' | 'generated' | 'signed' | 'archived'
+
+export type OperationDocument = {
+  id: string
+  operation_id: string
+  template_id: DocumentTemplateId
+  party: DocumentParty
+  status: DocumentStatus
+  data: Record<string, unknown>
+  pdf_storage_path: string | null
+  pdf_signed_storage_path: string | null
+  generated_at: string | null
+  signed_at: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
 }
 
 export type AnnualBudget = {
@@ -111,6 +188,28 @@ export type Operation = {
   client_id: string | null
   // Pubblicazione sito
   publish_to_website: boolean
+  // Dati per modulistica documenti
+  dati_catastali: { foglio?: string; particella?: string; sub?: string; categoria?: string; classe?: string; rendita?: string } | null
+  scala: string | null
+  piano: string | null
+  interno: string | null
+  servito_ascensore: boolean
+  destinazione_uso: string | null
+  composizione: string | null
+  confini: string | null
+  superficie_mq: number | null
+  locato_a: string | null
+  locato_canone: number | null
+  locato_scadenza: string | null
+  caparra: number | null
+  caparra_modalita: string | null
+  modalita_pagamento: string | null
+  condizioni_sospensive: string | null
+  scadenza_proposta: string | null
+  provenienza_immobile: string | null
+  provenienza_atto_data: string | null
+  provenienza_atto_notaio: string | null
+  quote_proprieta: Array<{ client_id: string; quota_pct: number; tipologia: 'piena' | 'nuda' | 'usufrutto' }> | null
 }
 
 export type ClientProperty = {

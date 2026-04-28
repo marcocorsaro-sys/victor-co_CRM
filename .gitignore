@@ -28,3 +28,7 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+
+# Documenti template (non committarli nel repo applicazione)
+Documenti/
+extract_pdfs.cjs
