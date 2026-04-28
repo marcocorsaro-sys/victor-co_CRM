@@ -49,6 +49,9 @@ export default function TopBar({ profile, onLogout, viewAsAgent, onSwitchView, o
             <NavLink to="/calendar" className={({ isActive }) => isActive ? 'active' : ''}>
               Calendario
             </NavLink>
+            <NavLink to="/admin/agency" className={({ isActive }) => isActive ? 'active' : ''}>
+              Agenzia
+            </NavLink>
             <NavLink to="/settings" className={({ isActive }) => isActive ? 'active' : ''}>
               Impostazioni
             </NavLink>

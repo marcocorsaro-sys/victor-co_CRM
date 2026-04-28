@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import type { Operation, OperationWithAgent, Profile } from '../lib/supabase'
 import { formatEur, formatDate } from '../lib/calculations'
+import DocumentsTab from './documents/DocumentsTab'
 
 type Props = {
   open: boolean
@@ -36,6 +38,7 @@ const infoRow = (label: string, value: React.ReactNode) => (
 )
 
 export default function OperationDetailModal({ open, operation, onClose, onEdit, onCloseOp, onDelete }: Props) {
+  const [tab, setTab] = useState<'dettagli' | 'documenti'>('dettagli')
   if (!open || !operation) return null
 
   const agent = operation.profiles as Profile | undefined
@@ -62,11 +65,26 @@ export default function OperationDetailModal({ open, operation, onClose, onEdit,
         )}
 
         {/* Badges */}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
           <span className={`badge badge-${operation.type}`}>{operation.type}</span>
           <span className={`badge badge-${operation.origin}`}>{operation.origin}</span>
           <span className={`badge badge-${operation.status}`}>{operation.status}</span>
         </div>
+
+        {/* Tabs */}
+        <div className="tabs" style={{ marginBottom: 16 }}>
+          <button className={`tab ${tab === 'dettagli' ? 'active' : ''}`} onClick={() => setTab('dettagli')}>
+            Dettagli
+          </button>
+          <button className={`tab ${tab === 'documenti' ? 'active' : ''}`} onClick={() => setTab('documenti')}>
+            📄 Documenti
+          </button>
+        </div>
+
+        {tab === 'documenti' ? (
+          <DocumentsTab operation={operation} />
+        ) : (
+        <>
 
         {/* Agente */}
         {sectionLabel('Agente')}
@@ -143,6 +161,8 @@ export default function OperationDetailModal({ open, operation, onClose, onEdit,
               {operation.notes}
             </div>
           </div>
+        )}
+        </>
         )}
 
         {/* Azioni */}

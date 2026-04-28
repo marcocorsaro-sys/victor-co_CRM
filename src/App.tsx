@@ -18,6 +18,7 @@ import AgentClients from './pages/AgentClients'
 import AdminValutazioni from './pages/AdminValutazioni'
 import AdminIntelligence from './pages/AdminIntelligence'
 import AdminAI from './pages/AdminAI'
+import AdminAgencySettings from './pages/AdminAgencySettings'
 import CalendarPage from './pages/CalendarPage'
 import Settings from './pages/Settings'
 import type { Profile } from './lib/supabase'
@@ -102,6 +103,7 @@ function App() {
               <Route path="/admin/valutazioni" element={<AdminValutazioni />} />
               <Route path="/admin/intelligence" element={<AdminIntelligence />} />
               <Route path="/admin/ai" element={<AdminAI />} />
+              <Route path="/admin/agency" element={<AdminAgencySettings />} />
               <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
