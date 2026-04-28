@@ -3,10 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useOperations } from '../hooks/useOperations'
 import { useProfiles } from '../hooks/useProfiles'
 import { useBudgets } from '../hooks/useBudgets'
-import { formatEur, formatDate, estimatePipelineCommission, getPipelineWeight, PIPELINE_FORMULAS } from '../lib/calculations'
+import { formatEur, formatDate, formatDateTime, estimatePipelineCommission, getPipelineWeight, PIPELINE_FORMULAS } from '../lib/calculations'
+import { exportCsv } from '../lib/exportCsv'
 import KpiCard from '../components/KpiCard'
 import OperationDetailModal from '../components/OperationDetailModal'
 import FormulaTip from '../components/FormulaTip'
+import DateRangePicker from '../components/DateRangePicker'
 import type { OperationWithAgent } from '../lib/supabase'
 
 export default function AdminAgentDetail() {
@@ -18,7 +20,19 @@ export default function AdminAgentDetail() {
   const [selectedYear, setSelectedYear] = useState(currentYear)
   const { allocations } = useBudgets(selectedYear)
   const [detailOp, setDetailOp] = useState<OperationWithAgent | null>(null)
+
+  // ── Filtri tabella immobili ──
+  const [search, setSearch] = useState('')
   const [fStatus, setFStatus] = useState('')
+  const [fType, setFType] = useState('')
+  const [fOrigin, setFOrigin] = useState('')
+  const [fProbability, setFProbability] = useState('') // '30' | '60' | '90' | 'none' | ''
+  const [fHasCollaborator, setFHasCollaborator] = useState('') // 'yes' | 'no' | ''
+  const [fPublishedSite, setFPublishedSite] = useState('') // 'yes' | 'no' | ''
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [dateField, setDateField] = useState<'sale' | 'mandate' | 'added'>('sale')
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   const loading = opsLoading || profilesLoading
   const agent = agents.find(a => a.id === agentId)
@@ -102,8 +116,124 @@ export default function AdminAgentDetail() {
     return months
   }, [completedYear, selectedYear])
 
-  // Filter operations for display
-  const displayOps = fStatus ? agentOps.filter(o => o.status === fStatus) : agentOps
+  // ── Filter operations for display ──
+  const displayOps = useMemo(() => {
+    return agentOps.filter(o => {
+      if (search) {
+        const q = search.toLowerCase()
+        const hay = [
+          o.property_name, o.address, o.buyer_name, o.collaborator_name,
+          o.buyer_first_name, o.buyer_last_name,
+          o.collaborator_first_name, o.collaborator_last_name,
+          o.notes,
+        ].filter(Boolean).join(' ').toLowerCase()
+        if (!hay.includes(q)) return false
+      }
+      if (fStatus && o.status !== fStatus) return false
+      if (fType && o.type !== fType) return false
+      if (fOrigin && o.origin !== fOrigin) return false
+      if (fProbability) {
+        if (fProbability === 'none' && o.sale_probability != null) return false
+        if (fProbability !== 'none' && String(o.sale_probability) !== fProbability) return false
+      }
+      if (fHasCollaborator) {
+        const hasCollab = !!(o.collaborator_id || o.collaborator_name || o.collaborator_first_name)
+        if (fHasCollaborator === 'yes' && !hasCollab) return false
+        if (fHasCollaborator === 'no' && hasCollab) return false
+      }
+      if (fPublishedSite) {
+        if (fPublishedSite === 'yes' && !o.publish_to_website) return false
+        if (fPublishedSite === 'no' && o.publish_to_website) return false
+      }
+      if (dateFrom || dateTo) {
+        let dateStr: string | null = null
+        if (dateField === 'sale') dateStr = o.sale_date
+        else if (dateField === 'mandate') dateStr = o.mandate_start_date
+        else dateStr = o.date_added.split('T')[0]
+        if (!dateStr) return false
+        if (dateFrom && dateStr < dateFrom) return false
+        if (dateTo && dateStr > dateTo) return false
+      }
+      return true
+    })
+  }, [agentOps, search, fStatus, fType, fOrigin, fProbability, fHasCollaborator, fPublishedSite, dateFrom, dateTo, dateField])
+
+  // Totals on the filtered set (handy for the user)
+  const filteredTotals = useMemo(() => {
+    let value = 0, gross = 0, agentComm = 0, collected = 0, collaboratorComm = 0
+    let estGross = 0, estAgent = 0, weightedGross = 0, weightedAgent = 0
+    let closed = 0, pipelineCount = 0
+    displayOps.forEach(o => {
+      value += o.final_value || o.property_value || 0
+      gross += o.gross_commission || 0
+      agentComm += o.agent_commission || 0
+      collected += o.commission_collected || 0
+      collaboratorComm += o.collaborator_commission || 0
+      if (o.status === 'completata') closed++
+      else {
+        pipelineCount++
+        const est = getEstimated(o)
+        if (est) {
+          estGross += est.grossCommission
+          estAgent += est.agentCommission
+          const w = getPipelineWeight(o)
+          weightedGross += est.grossCommission * w
+          weightedAgent += est.agentCommission * w
+        }
+      }
+    })
+    return { value, gross, agentComm, collected, collaboratorComm, estGross, estAgent, weightedGross, weightedAgent, closed, pipelineCount }
+  }, [displayOps, agent])
+
+  const hasFilters = !!(search || fStatus || fType || fOrigin || fProbability || fHasCollaborator || fPublishedSite || dateFrom || dateTo)
+  const resetFilters = () => {
+    setSearch(''); setFStatus(''); setFType(''); setFOrigin(''); setFProbability('')
+    setFHasCollaborator(''); setFPublishedSite(''); setDateFrom(''); setDateTo('')
+  }
+
+  // CSV export of filtered set with all relevant columns
+  const handleExport = () => {
+    const headers = [
+      'Immobile', 'Indirizzo', 'Tipo', 'Origine', 'Stato', 'Probabilità',
+      'Acquirente', 'Collaboratore', '% Coll.',
+      'Modalità venditore', '% / Fisso venditore',
+      'Modalità acquirente', '% / Fisso acquirente',
+      'Valore', 'Valore finale',
+      'Comm. Lorda', 'Quota Agente', 'Quota Coll.', 'Margine Agenzia',
+      'Comm. Lorda Stimata', 'Quota Agente Stimata',
+      'Comm. Incassata', 'Data Incasso',
+      'Inizio Incarico', 'Fine Incarico', 'Data Vendita', 'Inserito il',
+      'Pubblicato sul sito', 'Note',
+    ]
+    const rows = displayOps.map(o => {
+      const est = o.status === 'pipeline' ? getEstimated(o) : null
+      const collabName = [o.collaborator_first_name, o.collaborator_last_name].filter(Boolean).join(' ') || o.collaborator_name || ''
+      const buyerN = [o.buyer_first_name, o.buyer_last_name].filter(Boolean).join(' ') || o.buyer_name || ''
+      const sellerVal = o.comm_mode_seller === 'fixed' ? `${(o.comm_fixed_seller || 0).toFixed(2)}` : `${o.comm_pct_seller}%`
+      const buyerVal = o.comm_mode_buyer === 'fixed' ? `${(o.comm_fixed_buyer || 0).toFixed(2)}` : `${o.comm_pct_buyer}%`
+      const margin = o.gross_commission != null && o.agent_commission != null
+        ? (o.gross_commission - o.agent_commission - (o.collaborator_commission || 0)).toFixed(2)
+        : ''
+      return [
+        o.property_name, o.address || '', o.type, o.origin, o.status,
+        o.sale_probability ? `${o.sale_probability}%` : '',
+        buyerN, collabName, o.collaborator_comm_pct ? `${o.collaborator_comm_pct}%` : '',
+        o.comm_mode_seller || 'pct', sellerVal,
+        o.comm_mode_buyer || 'pct', buyerVal,
+        (o.property_value || 0).toFixed(2), (o.final_value || 0).toFixed(2),
+        (o.gross_commission || 0).toFixed(2), (o.agent_commission || 0).toFixed(2),
+        (o.collaborator_commission || 0).toFixed(2), margin,
+        est ? est.grossCommission.toFixed(2) : '', est ? est.agentCommission.toFixed(2) : '',
+        (o.commission_collected || 0).toFixed(2), o.collection_date || '',
+        o.mandate_start_date || '', o.mandate_end_date || '',
+        o.sale_date || '', formatDateTime(o.date_added),
+        o.publish_to_website ? 'Sì' : 'No',
+        (o.notes || '').replace(/\r?\n/g, ' '),
+      ]
+    })
+    const slug = (agent?.full_name || agentId || 'agente').toLowerCase().replace(/\s+/g, '-')
+    exportCsv(headers, rows, `victorco-${slug}-${new Date().toISOString().split('T')[0]}.csv`)
+  }
 
   if (!loading && !agent) {
     return (
@@ -326,39 +456,178 @@ export default function AdminAgentDetail() {
         </div>
       )}
 
-      {/* Operations list */}
+      {/* Operations list with rich filters */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <div className="section-heading" style={{ margin: 0 }}>
-          Immobili {fStatus && `(${fStatus})`}
+          Immobili {hasFilters && <span style={{ fontSize: 12, color: 'var(--g)', fontWeight: 400 }}>({displayOps.length} di {agentOps.length})</span>}
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <select className="filter-select" value={fStatus} onChange={e => setFStatus(e.target.value)} style={{ width: 150 }}>
-            <option value="">Tutti gli stati</option>
-            <option value="pipeline">Pipeline</option>
-            <option value="completata">Completata</option>
-          </select>
-        </div>
+        <button className="btn btn-secondary btn-sm" onClick={handleExport}>Export CSV</button>
       </div>
 
+      <div className="filters-bar">
+        <input className="filter-input" placeholder="Cerca immobile, indirizzo, acquirente, collaboratore, note..."
+          value={search} onChange={e => setSearch(e.target.value)} style={{ minWidth: 280, flex: 1 }} />
+        <select className="filter-select" value={fStatus} onChange={e => setFStatus(e.target.value)}>
+          <option value="">Tutti gli stati</option>
+          <option value="pipeline">Pipeline</option>
+          <option value="completata">Completata</option>
+        </select>
+        <select className="filter-select" value={fType} onChange={e => setFType(e.target.value)}>
+          <option value="">Tutti i tipi</option>
+          <option value="vendita">Vendita</option>
+          <option value="locazione">Locazione</option>
+        </select>
+        <select className="filter-select" value={fOrigin} onChange={e => setFOrigin(e.target.value)}>
+          <option value="">Tutte le origini</option>
+          <option value="agente">Agente</option>
+          <option value="agenzia">Agenzia</option>
+          <option value="valutazione">Valutazione</option>
+        </select>
+        <select className="filter-select" value={fProbability} onChange={e => setFProbability(e.target.value)}>
+          <option value="">Tutte le prob.</option>
+          <option value="30">30%</option>
+          <option value="60">60%</option>
+          <option value="90">90%</option>
+          <option value="none">Non definita</option>
+        </select>
+        <button className="btn btn-secondary btn-sm" onClick={() => setShowAdvanced(!showAdvanced)}
+          style={{ whiteSpace: 'nowrap' }}>
+          {showAdvanced ? '▲ Meno' : '▼ Filtri avanzati'}
+        </button>
+        {hasFilters && (
+          <button className="btn btn-secondary btn-sm" onClick={resetFilters} style={{ color: 'var(--red)' }}>
+            ✕ Reset
+          </button>
+        )}
+      </div>
+
+      {showAdvanced && (
+        <div style={{ background: 'var(--s1)', borderRadius: 12, padding: 16, marginBottom: 16, border: '1px solid var(--bd)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+            <div className="form-group">
+              <label className="form-label">Collaboratore</label>
+              <select className="form-select" value={fHasCollaborator} onChange={e => setFHasCollaborator(e.target.value)}>
+                <option value="">Tutti</option>
+                <option value="yes">Con collaboratore</option>
+                <option value="no">Senza collaboratore</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Pubblicazione sito</label>
+              <select className="form-select" value={fPublishedSite} onChange={e => setFPublishedSite(e.target.value)}>
+                <option value="">Tutti</option>
+                <option value="yes">Pubblicato</option>
+                <option value="no">Non pubblicato</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Filtra date su</label>
+              <select className="form-select" value={dateField} onChange={e => setDateField(e.target.value as 'sale' | 'mandate' | 'added')}>
+                <option value="sale">Data vendita</option>
+                <option value="mandate">Data inizio incarico</option>
+                <option value="added">Data inserimento</option>
+              </select>
+            </div>
+            <DateRangePicker from={dateFrom} to={dateTo}
+              onChange={(f, t) => { setDateFrom(f); setDateTo(t) }} label="Periodo" />
+          </div>
+        </div>
+      )}
+
+      {/* Filtered totals row */}
+      {!loading && hasFilters && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, marginBottom: 12, padding: '10px 14px', background: 'var(--s2)', borderRadius: 8, fontSize: 12 }}>
+          <div>
+            <div style={{ color: 'var(--g)', fontSize: 10, textTransform: 'uppercase', marginBottom: 2 }}>Risultati</div>
+            <div style={mono}><b>{filteredTotals.closed}</b> chiuse · <b>{filteredTotals.pipelineCount}</b> pipeline</div>
+          </div>
+          <div>
+            <div style={{ color: 'var(--g)', fontSize: 10, textTransform: 'uppercase', marginBottom: 2 }}>Valore tot.</div>
+            <div style={mono}>{formatEur(filteredTotals.value)}</div>
+          </div>
+          <div>
+            <div style={{ color: 'var(--g)', fontSize: 10, textTransform: 'uppercase', marginBottom: 2 }}>Comm. Lorda</div>
+            <div style={{ ...mono, color: 'var(--amber)' }}>{formatEur(filteredTotals.gross)}</div>
+          </div>
+          <div>
+            <div style={{ color: 'var(--g)', fontSize: 10, textTransform: 'uppercase', marginBottom: 2 }}>Quota Agente</div>
+            <div style={{ ...mono, color: 'var(--teal)' }}>{formatEur(filteredTotals.agentComm)}</div>
+          </div>
+          <div>
+            <div style={{ color: 'var(--g)', fontSize: 10, textTransform: 'uppercase', marginBottom: 2 }}>Incassato</div>
+            <div style={{ ...mono, color: 'var(--green)' }}>{formatEur(filteredTotals.collected)}</div>
+          </div>
+          {filteredTotals.estGross > 0 && (
+            <>
+              <div>
+                <div style={{ color: 'var(--g)', fontSize: 10, textTransform: 'uppercase', marginBottom: 2, display: 'inline-flex', alignItems: 'center' }}>
+                  <span>Stima Pipeline</span>
+                  <FormulaTip title="Comm. lorde stimate pipeline (filtrato)" formula={PIPELINE_FORMULAS.pipelineGross} />
+                </div>
+                <div style={{ ...mono, color: 'var(--amber)' }}>{formatEur(filteredTotals.estGross)}</div>
+              </div>
+              <div>
+                <div style={{ color: 'var(--g)', fontSize: 10, textTransform: 'uppercase', marginBottom: 2, display: 'inline-flex', alignItems: 'center' }}>
+                  <span>Stima Pesata</span>
+                  <FormulaTip title="Pipeline pesata (filtrato)" formula={PIPELINE_FORMULAS.pipelineWeighted} note={PIPELINE_FORMULAS.weight} />
+                </div>
+                <div style={{ ...mono, color: 'var(--teal)' }}>{formatEur(filteredTotals.weightedGross)}</div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="table-wrap">
-        <table>
+        <table style={{ minWidth: 1600 }}>
           <thead>
             <tr>
-              <th>Immobile</th><th>Tipo</th><th>Origine</th><th>Stato</th><th>Prob.</th>
-              <th>Valore</th><th>Comm. Lorde</th><th>Quota Agente</th><th>Data</th>
+              <th>Immobile</th>
+              <th>Tipo</th>
+              <th>Origine</th>
+              <th>Stato</th>
+              <th>Prob.</th>
+              <th>Acquirente</th>
+              <th>Collaboratore</th>
+              <th>% Vend.</th>
+              <th>% Acq.</th>
+              <th>Valore</th>
+              <th>Val. Finale</th>
+              <th>Comm. Lorda</th>
+              <th>Quota Agente</th>
+              <th>Quota Coll.</th>
+              <th>Margine Agenzia</th>
+              <th>Incassato</th>
+              <th>Inizio Inc.</th>
+              <th>Fine Inc.</th>
+              <th>Data Vendita</th>
+              <th>Inserito</th>
+              <th>Sito</th>
+              <th>Note</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={9}><div className="skeleton skeleton-row" /></td></tr>
+              <tr><td colSpan={22}><div className="skeleton skeleton-row" /></td></tr>
             ) : displayOps.length === 0 ? (
-              <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--g)', padding: 24 }}>Nessuna operazione</td></tr>
+              <tr><td colSpan={22} style={{ textAlign: 'center', color: 'var(--g)', padding: 24 }}>Nessuna operazione</td></tr>
             ) : (
               displayOps.map(op => {
                 const est = op.status === 'pipeline' ? getEstimated(op) : null
+                const buyerN = [op.buyer_first_name, op.buyer_last_name].filter(Boolean).join(' ') || op.buyer_name || ''
+                const collabN = [op.collaborator_first_name, op.collaborator_last_name].filter(Boolean).join(' ') || op.collaborator_name || ''
+                const sellerCell = op.comm_mode_seller === 'fixed'
+                  ? <span title="Modalità fissa">{formatEur(op.comm_fixed_seller || 0)}</span>
+                  : <span>{op.comm_pct_seller}%</span>
+                const buyerCell = op.comm_mode_buyer === 'fixed'
+                  ? <span title="Modalità fissa">{formatEur(op.comm_fixed_buyer || 0)}</span>
+                  : <span>{op.comm_pct_buyer}%</span>
+                const margin = op.gross_commission != null && op.agent_commission != null
+                  ? op.gross_commission - op.agent_commission - (op.collaborator_commission || 0)
+                  : null
                 return (
                   <tr key={op.id}>
-                    <td>
+                    <td style={{ minWidth: 200 }}>
                       <div className="clickable-cell" style={{ fontWeight: 600 }} onClick={() => setDetailOp(op)}>
                         {op.property_name}
                       </div>
@@ -384,15 +653,49 @@ export default function AdminAgentDetail() {
                         <span style={{ fontSize: 11, color: 'var(--g)' }}>—</span>
                       ) : null}
                     </td>
-                    <td style={mono}>{formatEur(op.final_value || op.property_value || 0)}</td>
+                    <td style={{ fontSize: 12, color: 'var(--gl)' }}>{buyerN || '—'}</td>
+                    <td style={{ fontSize: 12, color: 'var(--gl)' }}>
+                      {collabN ? (
+                        <span>
+                          {collabN}
+                          {op.collaborator_comm_pct ? <span style={{ color: 'var(--g)', marginLeft: 4 }}>({op.collaborator_comm_pct}%)</span> : null}
+                        </span>
+                      ) : '—'}
+                    </td>
+                    <td style={mono}>{sellerCell}</td>
+                    <td style={mono}>{buyerCell}</td>
+                    <td style={mono}>{op.property_value ? formatEur(op.property_value) : '—'}</td>
+                    <td style={mono}>{op.final_value ? formatEur(op.final_value) : '—'}</td>
                     <td style={{ ...mono, color: est ? 'var(--amber)' : undefined, fontStyle: est ? 'italic' : undefined }}>
                       {op.gross_commission ? formatEur(op.gross_commission) : est ? `~${formatEur(est.grossCommission)}` : '—'}
                     </td>
                     <td style={{ ...mono, color: 'var(--teal)', fontStyle: est ? 'italic' : undefined }}>
                       {op.agent_commission ? formatEur(op.agent_commission) : est ? `~${formatEur(est.agentCommission)}` : '—'}
                     </td>
-                    <td style={{ fontSize: 12, color: 'var(--gl)' }}>
-                      {op.sale_date ? formatDate(op.sale_date) : formatDate(op.date_added)}
+                    <td style={mono}>{op.collaborator_commission ? formatEur(op.collaborator_commission) : '—'}</td>
+                    <td style={{ ...mono, color: margin != null ? 'var(--green)' : undefined }}>
+                      {margin != null ? formatEur(margin) : '—'}
+                    </td>
+                    <td style={{ ...mono, color: op.commission_collected ? 'var(--green)' : undefined }}>
+                      {op.commission_collected ? formatEur(op.commission_collected) : '—'}
+                      {op.collection_date && (
+                        <div style={{ fontSize: 10, color: 'var(--g)' }}>{formatDate(op.collection_date)}</div>
+                      )}
+                    </td>
+                    <td style={{ fontSize: 12, color: 'var(--gl)' }}>{op.mandate_start_date ? formatDate(op.mandate_start_date) : '—'}</td>
+                    <td style={{ fontSize: 12, color: 'var(--gl)' }}>{op.mandate_end_date ? formatDate(op.mandate_end_date) : '—'}</td>
+                    <td style={{ fontSize: 12, color: 'var(--gl)' }}>{op.sale_date ? formatDate(op.sale_date) : '—'}</td>
+                    <td style={{ fontSize: 11, color: 'var(--g)' }}>{formatDateTime(op.date_added)}</td>
+                    <td>
+                      {op.publish_to_website ? (
+                        <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(34,197,94,0.15)', color: 'var(--green)', fontWeight: 600 }}>SÌ</span>
+                      ) : (
+                        <span style={{ fontSize: 10, color: 'var(--g)' }}>—</span>
+                      )}
+                    </td>
+                    <td style={{ fontSize: 11, color: 'var(--gl)', maxWidth: 200, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                      title={op.notes || ''}>
+                      {op.notes ? op.notes.slice(0, 60) + (op.notes.length > 60 ? '…' : '') : '—'}
                     </td>
                   </tr>
                 )
