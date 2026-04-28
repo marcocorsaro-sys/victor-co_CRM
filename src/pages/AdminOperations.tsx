@@ -396,7 +396,7 @@ export default function AdminOperations() {
         </div>
       )}
 
-      {!loading && filtered.length > 0 && (
+      {!loading && (
         <OperationsTotalsFooter
           operations={filtered}
           resolveAgent={(op) => getAgentProfile(op.agent_id)}

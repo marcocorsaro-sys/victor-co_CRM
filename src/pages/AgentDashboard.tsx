@@ -527,11 +527,12 @@ export default function AgentDashboard({ profile }: Props) {
         </table>
       </div>
 
-      {!loading && displayOps.length > 0 && (
+      {!loading && (
         <OperationsTotalsFooter
           operations={displayOps}
           resolveAgent={() => profile}
           yearLabel={selectedYear}
+          completedYearFilter={selectedYear}
         />
       )}
 

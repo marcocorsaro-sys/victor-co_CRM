@@ -14,7 +14,12 @@ type Props = {
   resolveAgent: (op: OperationWithAgent) => Profile | null | undefined
   /** Etichetta dell'anno mostrata nel titolo (default: anno corrente). */
   yearLabel?: number | string
-  /** Override testuale della label "Completate" (es. quando i filtri non vincolano l'anno). */
+  /**
+   * Se valorizzato, le completate vengono filtrate per `sale_date` in quell'anno.
+   * Se assente, somma tutte le completate del set passato (stato del filtro).
+   */
+  completedYearFilter?: number
+  /** Override testuale della label "Completate" (es. quando non si vincola l'anno). */
   completedLabel?: string
 }
 
@@ -30,22 +35,35 @@ type Props = {
  * Tutti i calcoli usano `estimatePipelineCommission` (corretto per modalità fissa
  * e quote collaboratore) e `getPipelineWeight` (50% di fallback).
  */
-export default function OperationsTotalsFooter({ operations, resolveAgent, yearLabel, completedLabel }: Props) {
+export default function OperationsTotalsFooter({ operations, resolveAgent, yearLabel, completedYearFilter, completedLabel }: Props) {
   const year = yearLabel ?? new Date().getFullYear()
 
+  // Optional sale_date year filter for completed
+  const yStart = completedYearFilter != null ? new Date(completedYearFilter, 0, 1) : null
+  const yEnd = completedYearFilter != null ? new Date(completedYearFilter + 1, 0, 1) : null
+
   let completedGross = 0
+  let completedCount = 0
   let pipelineGross = 0
   let pipelineWeighted = 0
+  let pipelineCount = 0
 
   operations.forEach(op => {
     if (op.status === 'completata') {
-      completedGross += op.gross_commission || 0
+      if (yStart && yEnd) {
+        if (!op.sale_date) return
+        const d = new Date(op.sale_date)
+        if (d < yStart || d >= yEnd) return
+      }
+      completedGross += Number(op.gross_commission) || 0
+      completedCount++
     } else if (op.status === 'pipeline') {
       const agent = resolveAgent(op)
       const est = estimatePipelineCommission(op, agent)
       if (!est) return
       pipelineGross += est.grossCommission
       pipelineWeighted += est.grossCommission * getPipelineWeight(op)
+      pipelineCount++
     }
   })
 
@@ -73,6 +91,7 @@ export default function OperationsTotalsFooter({ operations, resolveAgent, yearL
   }
 
   const completedLbl = completedLabel ?? `Tot. Completate ${year}`
+  const countStyle: React.CSSProperties = { fontSize: 10, color: 'var(--g)', marginTop: 2, fontFamily: "'JetBrains Mono', monospace" }
 
   return (
     <div style={{
@@ -86,9 +105,12 @@ export default function OperationsTotalsFooter({ operations, resolveAgent, yearL
         <div style={labelStyle}>
           <span>{completedLbl}</span>
           <FormulaTip title={completedLbl}
-            formula="Σ gross_commission delle operazioni completate nel set filtrato" />
+            formula={completedYearFilter != null
+              ? `Σ gross_commission delle operazioni 'completata' con sale_date nel ${completedYearFilter}`
+              : "Σ gross_commission delle operazioni 'completata' nel set filtrato"} />
         </div>
         <div style={{ ...valueStyle, color: 'var(--w)' }}>{formatEur(completedGross)}</div>
+        <div style={countStyle}>{completedCount} {completedCount === 1 ? 'operazione' : 'operazioni'}</div>
       </div>
       <div style={cellStyle}>
         <div style={labelStyle}>
@@ -98,6 +120,7 @@ export default function OperationsTotalsFooter({ operations, resolveAgent, yearL
             note="Scenario ottimistico: tutte le pipeline chiudono." />
         </div>
         <div style={{ ...valueStyle, color: 'var(--amber)' }}>{formatEur(pipelineGross)}</div>
+        <div style={countStyle}>{pipelineCount} {pipelineCount === 1 ? 'operazione' : 'operazioni'}</div>
       </div>
       <div style={cellStyle}>
         <div style={labelStyle}>
@@ -107,6 +130,7 @@ export default function OperationsTotalsFooter({ operations, resolveAgent, yearL
             note={PIPELINE_FORMULAS.weight} />
         </div>
         <div style={{ ...valueStyle, color: 'var(--teal)' }}>{formatEur(pipelineWeighted)}</div>
+        <div style={countStyle}>peso medio {pipelineGross > 0 ? `${(pipelineWeighted / pipelineGross * 100).toFixed(0)}%` : '—'}</div>
       </div>
       <div style={cellStyle}>
         <div style={labelStyle}>
@@ -116,6 +140,7 @@ export default function OperationsTotalsFooter({ operations, resolveAgent, yearL
             note="Scenario realistico: completate effettive + stima pipeline ponderata." />
         </div>
         <div style={{ ...valueStyle, color: 'var(--green)' }}>{formatEur(totalCompletedPlusWeighted)}</div>
+        <div style={countStyle}>{completedCount + pipelineCount} {completedCount + pipelineCount === 1 ? 'operazione' : 'operazioni'} totali</div>
       </div>
     </div>
   )

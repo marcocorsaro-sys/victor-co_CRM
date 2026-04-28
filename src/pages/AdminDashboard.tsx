@@ -354,11 +354,12 @@ export default function AdminDashboard() {
         </table>
       </div>
 
-      {!loading && filteredOps.length > 0 && (
+      {!loading && (
         <OperationsTotalsFooter
           operations={filteredOps}
           resolveAgent={(op) => agents.find(a => a.id === op.agent_id) || null}
           yearLabel={selectedYear}
+          completedYearFilter={selectedYear}
           completedLabel={`Tot. Completate ${selectedYear} (filtrato)`}
         />
       )}

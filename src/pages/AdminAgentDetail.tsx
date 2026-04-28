@@ -706,11 +706,12 @@ export default function AdminAgentDetail() {
         </table>
       </div>
 
-      {!loading && agent && displayOps.length > 0 && (
+      {!loading && agent && (
         <OperationsTotalsFooter
           operations={displayOps}
           resolveAgent={() => agent}
           yearLabel={selectedYear}
+          completedYearFilter={selectedYear}
         />
       )}
 
