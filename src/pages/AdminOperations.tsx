@@ -9,6 +9,7 @@ import { exportCsv } from '../lib/exportCsv'
 import OpModal from '../components/OpModal'
 import CloseModal from '../components/CloseModal'
 import OperationDetailModal from '../components/OperationDetailModal'
+import OperationsTotalsFooter from '../components/OperationsTotalsFooter'
 import AgentProfileModal from '../components/AgentProfileModal'
 import ToastContainer from '../components/ToastContainer'
 import { useToast } from '../hooks/useToast'
@@ -393,6 +394,14 @@ export default function AdminOperations() {
           <span className="page-info">Pag. {page + 1} di {totalPages} ({filtered.length} risultati)</span>
           <button onClick={() => setPage(p => p + 1)} disabled={page >= totalPages - 1}>Succ →</button>
         </div>
+      )}
+
+      {!loading && filtered.length > 0 && (
+        <OperationsTotalsFooter
+          operations={filtered}
+          resolveAgent={(op) => getAgentProfile(op.agent_id)}
+          completedLabel="Tot. Completate (filtrato)"
+        />
       )}
 
       <OpModal open={showCreateModal} onClose={() => setShowCreateModal(false)} onSave={handleCreate} agents={agents} />

@@ -1,0 +1,122 @@
+import type { OperationWithAgent, Profile } from '../lib/supabase'
+import { formatEur, estimatePipelineCommission, getPipelineWeight, PIPELINE_FORMULAS } from '../lib/calculations'
+import FormulaTip from './FormulaTip'
+
+type Props = {
+  /** Le operazioni su cui calcolare i totali (già filtrate dalla tabella). */
+  operations: OperationWithAgent[]
+  /**
+   * Risolutore agente per ogni operazione.
+   * - In viste admin globali: passa i Profile e cerca per agent_id.
+   * - In viste agente singolo: ritorna sempre lo stesso profilo.
+   * - Se profile === null/undefined, l'operazione viene ignorata nel calcolo pipeline.
+   */
+  resolveAgent: (op: OperationWithAgent) => Profile | null | undefined
+  /** Etichetta dell'anno mostrata nel titolo (default: anno corrente). */
+  yearLabel?: number | string
+  /** Override testuale della label "Completate" (es. quando i filtri non vincolano l'anno). */
+  completedLabel?: string
+}
+
+/**
+ * Footer riassuntivo standard per ogni tabella di operazioni.
+ *
+ * Mostra 4 metriche fisse:
+ *   1) Totale Completate (Σ gross_commission delle ops `completata` nel set)
+ *   2) Totale Pipeline 100% (Σ stima lorda delle ops `pipeline`, senza pesi)
+ *   3) Totale Pipeline Pesata (Σ stima × probabilità, fallback 50%)
+ *   4) Totale Completate + Pesata (1 + 3, scenario realistico)
+ *
+ * Tutti i calcoli usano `estimatePipelineCommission` (corretto per modalità fissa
+ * e quote collaboratore) e `getPipelineWeight` (50% di fallback).
+ */
+export default function OperationsTotalsFooter({ operations, resolveAgent, yearLabel, completedLabel }: Props) {
+  const year = yearLabel ?? new Date().getFullYear()
+
+  let completedGross = 0
+  let pipelineGross = 0
+  let pipelineWeighted = 0
+
+  operations.forEach(op => {
+    if (op.status === 'completata') {
+      completedGross += op.gross_commission || 0
+    } else if (op.status === 'pipeline') {
+      const agent = resolveAgent(op)
+      const est = estimatePipelineCommission(op, agent)
+      if (!est) return
+      pipelineGross += est.grossCommission
+      pipelineWeighted += est.grossCommission * getPipelineWeight(op)
+    }
+  })
+
+  const totalCompletedPlusWeighted = completedGross + pipelineWeighted
+
+  const cellStyle: React.CSSProperties = {
+    padding: '12px 16px',
+    borderRadius: 10,
+    background: 'var(--s2)',
+    border: '1px solid var(--bd)',
+  }
+  const labelStyle: React.CSSProperties = {
+    fontSize: 10,
+    color: 'var(--g)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.4px',
+    marginBottom: 6,
+    display: 'inline-flex',
+    alignItems: 'center',
+  }
+  const valueStyle: React.CSSProperties = {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: 16,
+    fontWeight: 700,
+  }
+
+  const completedLbl = completedLabel ?? `Tot. Completate ${year}`
+
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+      gap: 10,
+      marginTop: 12,
+      marginBottom: 24,
+    }}>
+      <div style={cellStyle}>
+        <div style={labelStyle}>
+          <span>{completedLbl}</span>
+          <FormulaTip title={completedLbl}
+            formula="Σ gross_commission delle operazioni completate nel set filtrato" />
+        </div>
+        <div style={{ ...valueStyle, color: 'var(--w)' }}>{formatEur(completedGross)}</div>
+      </div>
+      <div style={cellStyle}>
+        <div style={labelStyle}>
+          <span>Tot. Pipeline (100%)</span>
+          <FormulaTip title="Tot. Pipeline (100%)"
+            formula={PIPELINE_FORMULAS.pipelineGross}
+            note="Scenario ottimistico: tutte le pipeline chiudono." />
+        </div>
+        <div style={{ ...valueStyle, color: 'var(--amber)' }}>{formatEur(pipelineGross)}</div>
+      </div>
+      <div style={cellStyle}>
+        <div style={labelStyle}>
+          <span>Tot. Pipeline Pesate {year}</span>
+          <FormulaTip title={`Tot. Pipeline Pesate ${year}`}
+            formula={PIPELINE_FORMULAS.pipelineWeighted}
+            note={PIPELINE_FORMULAS.weight} />
+        </div>
+        <div style={{ ...valueStyle, color: 'var(--teal)' }}>{formatEur(pipelineWeighted)}</div>
+      </div>
+      <div style={cellStyle}>
+        <div style={labelStyle}>
+          <span>Tot. Completate + Pesate {year}</span>
+          <FormulaTip title={`Tot. Completate + Pesate ${year}`}
+            formula={`(${completedLbl}) + (Tot. Pipeline Pesate ${year})`}
+            note="Scenario realistico: completate effettive + stima pipeline ponderata." />
+        </div>
+        <div style={{ ...valueStyle, color: 'var(--green)' }}>{formatEur(totalCompletedPlusWeighted)}</div>
+      </div>
+    </div>
+  )
+}

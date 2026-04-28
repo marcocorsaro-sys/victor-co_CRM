@@ -8,6 +8,7 @@ import KpiCard from '../components/KpiCard'
 import OpModal from '../components/OpModal'
 import CloseModal from '../components/CloseModal'
 import OperationDetailModal from '../components/OperationDetailModal'
+import OperationsTotalsFooter from '../components/OperationsTotalsFooter'
 import ToastContainer from '../components/ToastContainer'
 import FormulaTip from '../components/FormulaTip'
 import DateRangePicker from '../components/DateRangePicker'
@@ -525,6 +526,14 @@ export default function AgentDashboard({ profile }: Props) {
           </tbody>
         </table>
       </div>
+
+      {!loading && displayOps.length > 0 && (
+        <OperationsTotalsFooter
+          operations={displayOps}
+          resolveAgent={() => profile}
+          yearLabel={selectedYear}
+        />
+      )}
 
       <OpModal
         open={showOpModal}

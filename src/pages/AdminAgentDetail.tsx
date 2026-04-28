@@ -7,6 +7,7 @@ import { formatEur, formatDate, formatDateTime, estimatePipelineCommission, getP
 import { exportCsv } from '../lib/exportCsv'
 import KpiCard from '../components/KpiCard'
 import OperationDetailModal from '../components/OperationDetailModal'
+import OperationsTotalsFooter from '../components/OperationsTotalsFooter'
 import FormulaTip from '../components/FormulaTip'
 import DateRangePicker from '../components/DateRangePicker'
 import type { OperationWithAgent } from '../lib/supabase'
@@ -704,6 +705,14 @@ export default function AdminAgentDetail() {
           </tbody>
         </table>
       </div>
+
+      {!loading && agent && displayOps.length > 0 && (
+        <OperationsTotalsFooter
+          operations={displayOps}
+          resolveAgent={() => agent}
+          yearLabel={selectedYear}
+        />
+      )}
 
       <OperationDetailModal
         open={!!detailOp}

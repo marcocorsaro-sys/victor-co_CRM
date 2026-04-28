@@ -11,6 +11,7 @@ import BudgetSection from '../components/BudgetSection'
 import YearComparisonChart from '../components/YearComparisonChart'
 import YearComparisonSummary from '../components/YearComparisonSummary'
 import OperationDetailModal from '../components/OperationDetailModal'
+import OperationsTotalsFooter from '../components/OperationsTotalsFooter'
 import AgentProfileModal from '../components/AgentProfileModal'
 import FormulaTip from '../components/FormulaTip'
 import type { OperationWithAgent, Profile } from '../lib/supabase'
@@ -352,6 +353,15 @@ export default function AdminDashboard() {
           </tbody>
         </table>
       </div>
+
+      {!loading && filteredOps.length > 0 && (
+        <OperationsTotalsFooter
+          operations={filteredOps}
+          resolveAgent={(op) => agents.find(a => a.id === op.agent_id) || null}
+          yearLabel={selectedYear}
+          completedLabel={`Tot. Completate ${selectedYear} (filtrato)`}
+        />
+      )}
 
       {/* Detail Modals */}
       <OperationDetailModal
