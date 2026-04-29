@@ -107,7 +107,15 @@ export default function AdminDashboard() {
     if (fOrigin && o.origin !== fOrigin) return false
     if (fStatus && o.status !== fStatus) return false
     if (fPeriod) {
-      const d = o.sale_date ? new Date(o.sale_date) : new Date(o.date_added)
+      // Logica filtro periodo (richiesta team): le pipeline sono "current" e
+      // vengono mostrate sempre. Il filtro periodo si applica solo alle completate
+      // tramite sale_date — NON tramite date_added (data di inserimento).
+      if (o.status === 'pipeline') {
+        // Pipeline = sempre visibile per i filtri periodo
+        return true
+      }
+      if (!o.sale_date) return false
+      const d = new Date(o.sale_date)
       const now = new Date()
       if (fPeriod === 'month') {
         if (d.getMonth() !== now.getMonth() || d.getFullYear() !== now.getFullYear()) return false

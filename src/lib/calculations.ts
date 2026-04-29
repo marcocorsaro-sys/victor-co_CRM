@@ -103,11 +103,21 @@ export function calculateCommissions(
   const seller = modeSeller === 'fixed' ? (opts?.commFixedSeller || 0) : finalValue * (commPctSeller / 100)
   const buyer = modeBuyer === 'fixed' ? (opts?.commFixedBuyer || 0) : finalValue * (commPctBuyer / 100)
   const grossCommission = seller + buyer
+
+  // Quota agenzia / agente sul lordo (non dipende dalla collaborazione)
   const agentPct = origin === 'agente' ? agentCommPctAgent : agentCommPctAgency
-  const agentCommission = grossCommission * (agentPct / 100)
+  const agentGrossCommission = grossCommission * (agentPct / 100)
+  const agencyRevenue = grossCommission - agentGrossCommission
+
+  // ───────────────────────────────────────────────────────────────────────
+  // LOGICA COLLABORAZIONE (richiesta team meeting 28-04-2026):
+  // La quota del collaboratore esce SEMPRE dalla quota dell'agente principale,
+  // mai dal monte agenzia. Es: agente principale al 50%, collab interno 50%
+  // → 50% agenzia / 25% agente / 25% collaboratore (non 50/40/10 come prima).
+  // ───────────────────────────────────────────────────────────────────────
   const collabPct = opts?.collaboratorCommPct || 0
-  const collaboratorCommission = collabPct > 0 ? grossCommission * (collabPct / 100) : 0
-  const agencyRevenue = grossCommission - agentCommission - collaboratorCommission
+  const collaboratorCommission = collabPct > 0 ? agentGrossCommission * (collabPct / 100) : 0
+  const agentCommission = agentGrossCommission - collaboratorCommission
 
   return {
     grossCommission: Number(grossCommission.toFixed(2)),

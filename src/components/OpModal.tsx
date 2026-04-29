@@ -378,41 +378,67 @@ export default function OpModal({ open, onClose, onSave, initial, agentId, agent
           {/* ─── Commissioni venditore ─── */}
           <div className="form-row">
             <div className="form-group" style={{ flex: 1 }}>
-              <label className="form-label">
-                Comm. venditore
-                <button type="button" onClick={() => set('comm_mode_seller', form.comm_mode_seller === 'pct' ? 'fixed' : 'pct')}
-                  style={{ marginLeft: 8, fontSize: 10, padding: '1px 6px', borderRadius: 4, border: '1px solid var(--bd)', background: 'var(--bg2)', color: 'var(--lime)', cursor: 'pointer' }}>
-                  {form.comm_mode_seller === 'pct' ? '%' : 'EUR'}
+              <label className="form-label">Comm. venditore</label>
+              <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+                <button type="button"
+                  onClick={() => set('comm_mode_seller', 'pct')}
+                  style={{ flex: 1, padding: '6px 8px', fontSize: 11, fontWeight: 600, borderRadius: 6,
+                    border: '1px solid var(--bd)', cursor: 'pointer',
+                    background: form.comm_mode_seller === 'pct' ? 'var(--lime)' : 'var(--s3)',
+                    color: form.comm_mode_seller === 'pct' ? 'var(--bg)' : 'var(--gl)' }}>
+                  Percentuale (%)
                 </button>
-              </label>
+                <button type="button"
+                  onClick={() => set('comm_mode_seller', 'fixed')}
+                  style={{ flex: 1, padding: '6px 8px', fontSize: 11, fontWeight: 600, borderRadius: 6,
+                    border: '1px solid var(--bd)', cursor: 'pointer',
+                    background: form.comm_mode_seller === 'fixed' ? 'var(--lime)' : 'var(--s3)',
+                    color: form.comm_mode_seller === 'fixed' ? 'var(--bg)' : 'var(--gl)' }}>
+                  Fisso (€)
+                </button>
+              </div>
               {form.comm_mode_seller === 'pct' ? (
                 <input className="form-input" type="number" step="0.01" min="0" max="100"
-                  value={form.comm_pct_seller} onChange={e => set('comm_pct_seller', e.target.value)} />
+                  value={form.comm_pct_seller} onChange={e => set('comm_pct_seller', e.target.value)}
+                  placeholder="es. 3" />
               ) : (
                 <input className="form-input" type="text" inputMode="decimal"
                   value={form.comm_fixed_seller} onChange={e => set('comm_fixed_seller', e.target.value)}
                   onFocus={e => { const n = parseEurInput(e.target.value); if (n) e.target.value = String(n) }}
                   onBlur={e => { const n = parseEurInput(e.target.value); set('comm_fixed_seller', n ? toEurInput(n) : '') }}
-                  placeholder="0,00" />
+                  placeholder="es. 8.000,00" />
               )}
             </div>
             <div className="form-group" style={{ flex: 1 }}>
-              <label className="form-label">
-                Comm. acquirente
-                <button type="button" onClick={() => set('comm_mode_buyer', form.comm_mode_buyer === 'pct' ? 'fixed' : 'pct')}
-                  style={{ marginLeft: 8, fontSize: 10, padding: '1px 6px', borderRadius: 4, border: '1px solid var(--bd)', background: 'var(--bg2)', color: 'var(--lime)', cursor: 'pointer' }}>
-                  {form.comm_mode_buyer === 'pct' ? '%' : 'EUR'}
+              <label className="form-label">Comm. acquirente</label>
+              <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+                <button type="button"
+                  onClick={() => set('comm_mode_buyer', 'pct')}
+                  style={{ flex: 1, padding: '6px 8px', fontSize: 11, fontWeight: 600, borderRadius: 6,
+                    border: '1px solid var(--bd)', cursor: 'pointer',
+                    background: form.comm_mode_buyer === 'pct' ? 'var(--lime)' : 'var(--s3)',
+                    color: form.comm_mode_buyer === 'pct' ? 'var(--bg)' : 'var(--gl)' }}>
+                  Percentuale (%)
                 </button>
-              </label>
+                <button type="button"
+                  onClick={() => set('comm_mode_buyer', 'fixed')}
+                  style={{ flex: 1, padding: '6px 8px', fontSize: 11, fontWeight: 600, borderRadius: 6,
+                    border: '1px solid var(--bd)', cursor: 'pointer',
+                    background: form.comm_mode_buyer === 'fixed' ? 'var(--lime)' : 'var(--s3)',
+                    color: form.comm_mode_buyer === 'fixed' ? 'var(--bg)' : 'var(--gl)' }}>
+                  Fisso (€)
+                </button>
+              </div>
               {form.comm_mode_buyer === 'pct' ? (
                 <input className="form-input" type="number" step="0.01" min="0" max="100"
-                  value={form.comm_pct_buyer} onChange={e => set('comm_pct_buyer', e.target.value)} />
+                  value={form.comm_pct_buyer} onChange={e => set('comm_pct_buyer', e.target.value)}
+                  placeholder="es. 3" />
               ) : (
                 <input className="form-input" type="text" inputMode="decimal"
                   value={form.comm_fixed_buyer} onChange={e => set('comm_fixed_buyer', e.target.value)}
                   onFocus={e => { const n = parseEurInput(e.target.value); if (n) e.target.value = String(n) }}
                   onBlur={e => { const n = parseEurInput(e.target.value); set('comm_fixed_buyer', n ? toEurInput(n) : '') }}
-                  placeholder="0,00" />
+                  placeholder="es. 8.000,00" />
               )}
             </div>
           </div>

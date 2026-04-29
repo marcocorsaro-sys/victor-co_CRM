@@ -54,9 +54,14 @@ export default function AdminOperations() {
       if (fOrigin && o.origin !== fOrigin) return false
       if (fStatus && o.status !== fStatus) return false
       if (dateFrom || dateTo) {
-        const d = (o.sale_date || o.date_added).split('T')[0]
-        if (dateFrom && d < dateFrom) return false
-        if (dateTo && d > dateTo) return false
+        // Filtro range date applicato solo alle completate (sale_date).
+        // Le pipeline restano sempre visibili (sono "current").
+        if (o.status === 'completata') {
+          if (!o.sale_date) return false
+          const d = o.sale_date.split('T')[0]
+          if (dateFrom && d < dateFrom) return false
+          if (dateTo && d > dateTo) return false
+        }
       }
       return true
     })
