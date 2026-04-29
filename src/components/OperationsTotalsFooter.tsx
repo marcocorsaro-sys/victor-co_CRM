@@ -49,7 +49,7 @@ export default function OperationsTotalsFooter({ operations, resolveAgent, yearL
   let pipelineCount = 0
 
   operations.forEach(op => {
-    if (op.status === 'completata') {
+    if (op.status === 'incassato') {
       if (yStart && yEnd) {
         if (!op.sale_date) return
         const d = new Date(op.sale_date)

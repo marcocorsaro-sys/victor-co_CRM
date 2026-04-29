@@ -8,8 +8,14 @@ type Props = {
   operation: OperationWithAgent | null
   onClose: () => void
   onEdit: (op: Operation) => void
+  /** Callback per chiudere/incassare l'operazione (apre CloseModal). */
   onCloseOp?: (op: Operation) => void
+  /** Cambia lo stato dell'operazione (es. → 'proposta_accettata' o 'terminato'). */
+  onChangeStatus?: (op: Operation, newStatus: 'pipeline' | 'proposta_accettata' | 'incassato' | 'terminato') => void
+  /** Eliminazione permanente (admin only). */
   onDelete?: (id: string) => void
+  /** Mostra il bottone elimina permanente. */
+  isAdmin?: boolean
 }
 
 const sectionLabel = (text: string) => (
@@ -37,7 +43,7 @@ const infoRow = (label: string, value: React.ReactNode) => (
   </div>
 )
 
-export default function OperationDetailModal({ open, operation, onClose, onEdit, onCloseOp, onDelete }: Props) {
+export default function OperationDetailModal({ open, operation, onClose, onEdit, onCloseOp, onChangeStatus, onDelete, isAdmin }: Props) {
   const [tab, setTab] = useState<'dettagli' | 'documenti'>('dettagli')
   if (!open || !operation) return null
 
@@ -166,21 +172,69 @@ export default function OperationDetailModal({ open, operation, onClose, onEdit,
         )}
 
         {/* Azioni */}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--bd)' }}>
-          {onDelete && (
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--bd)', flexWrap: 'wrap' }}>
+          {/* Termina mandato (per pipeline o proposta_accettata) */}
+          {onChangeStatus && (operation.status === 'pipeline' || operation.status === 'proposta_accettata') && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                if (confirm('Confermi la fine del mandato? L\'operazione verrà marcata come "terminato".')) {
+                  onChangeStatus(operation, 'terminato')
+                }
+              }}
+              style={{ marginRight: 'auto', color: 'var(--g)' }}
+              title="Mandato scaduto / non rinnovato / cliente revoca"
+            >
+              Termina mandato
+            </button>
+          )}
+
+          {/* Elimina permanente — solo admin, distruttivo */}
+          {isAdmin && onDelete && (
             <button
               className="btn btn-danger"
-              onClick={() => onDelete(operation.id)}
-              style={{ marginRight: 'auto' }}
+              onClick={() => {
+                if (confirm('⚠ ELIMINAZIONE PERMANENTE\n\nQuesta operazione cancellerà DEFINITIVAMENTE l\'immobile dal database. Usa solo per record di test o duplicati. Per mandati scaduti usa "Termina mandato".\n\nProcedere?')) {
+                  onDelete(operation.id)
+                }
+              }}
+              style={{ background: 'rgba(239,68,68,0.15)', color: 'var(--red)', border: '1px solid var(--red)' }}
+              title="Elimina permanentemente dal DB (admin only)"
             >
-              Elimina
+              🗑 Elimina permanente
             </button>
           )}
-          {onCloseOp && operation.status === 'pipeline' && (
-            <button className="btn btn-secondary" onClick={() => onCloseOp(operation)}>
-              Chiudi operazione
+
+          {/* Proposta accettata (solo pipeline) */}
+          {onChangeStatus && operation.status === 'pipeline' && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => onChangeStatus(operation, 'proposta_accettata')}
+              style={{ background: 'rgba(245,158,11,0.15)', color: 'var(--amber)' }}
+              title="Soldi attesi ma non ancora incassati"
+            >
+              Proposta accettata
             </button>
           )}
+
+          {/* Registra incasso (per pipeline o proposta_accettata) */}
+          {onCloseOp && (operation.status === 'pipeline' || operation.status === 'proposta_accettata') && (
+            <button className="btn btn-success" onClick={() => onCloseOp(operation)}>
+              {operation.status === 'proposta_accettata' ? 'Registra incasso' : 'Chiudi e incassa'}
+            </button>
+          )}
+
+          {/* Riapri (per terminato) */}
+          {onChangeStatus && operation.status === 'terminato' && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => onChangeStatus(operation, 'pipeline')}
+              title="Riporta in pipeline"
+            >
+              Riapri in pipeline
+            </button>
+          )}
+
           <button className="btn btn-primary" onClick={() => onEdit(operation)}>
             Modifica
           </button>

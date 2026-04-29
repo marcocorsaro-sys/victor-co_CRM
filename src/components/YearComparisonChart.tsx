@@ -15,7 +15,7 @@ type Props = {
 function getMonthlyData(ops: OperationWithAgent[], year: number) {
   const monthly = Array(12).fill(0) as number[]
   ops.forEach(o => {
-    if (o.status !== 'completata' || !o.sale_date) return
+    if (o.status !== 'incassato' || !o.sale_date) return
     const d = new Date(o.sale_date)
     if (d.getFullYear() !== year) return
     monthly[d.getMonth()] += o.gross_commission || 0

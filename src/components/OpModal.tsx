@@ -20,7 +20,7 @@ export default function OpModal({ open, onClose, onSave, initial, agentId, agent
     address: '',
     type: 'vendita' as 'vendita' | 'locazione',
     origin: 'agente' as 'agente' | 'agenzia' | 'valutazione',
-    status: 'pipeline' as 'pipeline' | 'completata',
+    status: 'pipeline' as 'pipeline' | 'proposta_accettata' | 'incassato' | 'terminato',
     property_value: '',
     comm_pct_seller: '3',
     comm_pct_buyer: '3',
@@ -47,7 +47,7 @@ export default function OpModal({ open, onClose, onSave, initial, agentId, agent
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  const isCompleted = form.status === 'completata'
+  const isCompleted = form.status === 'incassato'
   const isEditing = !!initial
 
   const effectiveAgentProfile = useMemo(() => {
@@ -320,7 +320,9 @@ export default function OpModal({ open, onClose, onSave, initial, agentId, agent
               <label className="form-label">Stato</label>
               <select className="form-select" value={form.status} onChange={e => set('status', e.target.value)}>
                 <option value="pipeline">Pipeline</option>
-                <option value="completata">Completata</option>
+                <option value="proposta_accettata">Proposta accettata</option>
+              <option value="incassato">Incassato</option>
+              <option value="terminato">Terminato</option>
               </select>
             </div>
           )}

@@ -30,7 +30,7 @@ export default function MonthlyChart({ operations }: Props) {
     if (!canvasRef.current) return
 
     const months = getLast12Months()
-    const completed = operations.filter(o => o.status === 'completata' && o.sale_date)
+    const completed = operations.filter(o => o.status === 'incassato' && o.sale_date)
 
     const data = months.map(m => {
       const ops = completed.filter(o => {

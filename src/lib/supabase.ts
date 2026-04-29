@@ -148,7 +148,7 @@ export type Operation = {
   property_name: string
   address: string | null
   type: 'vendita' | 'locazione'
-  status: 'pipeline' | 'completata'
+  status: 'pipeline' | 'proposta_accettata' | 'incassato' | 'terminato'
   origin: 'agente' | 'agenzia' | 'valutazione'
   property_value: number | null
   comm_pct_seller: number

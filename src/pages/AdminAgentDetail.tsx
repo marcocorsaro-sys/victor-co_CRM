@@ -49,7 +49,7 @@ export default function AdminAgentDetail() {
 
   const completedYear = useMemo(() =>
     agentOps.filter(o =>
-      o.status === 'completata' && o.sale_date &&
+      o.status === 'incassato' && o.sale_date &&
       new Date(o.sale_date) >= yearStart && new Date(o.sale_date) < yearEnd
     ),
     [agentOps, selectedYear]
@@ -170,7 +170,7 @@ export default function AdminAgentDetail() {
       agentComm += o.agent_commission || 0
       collected += o.commission_collected || 0
       collaboratorComm += o.collaborator_commission || 0
-      if (o.status === 'completata') closed++
+      if (o.status === 'incassato') closed++
       else {
         pipelineCount++
         const est = getEstimated(o)
@@ -282,7 +282,7 @@ export default function AdminAgentDetail() {
       {/* KPIs */}
       <div className="kpi-grid" style={{ marginBottom: 20 }}>
         <KpiCard value={completedYear.length.toString()} label={`Chiuse ${selectedYear}`} loading={loading}
-          onClick={() => setFStatus(fStatus === 'completata' ? '' : 'completata')} />
+          onClick={() => setFStatus(fStatus === 'incassato' ? '' : 'incassato')} />
         <KpiCard value={pipelineOps.length.toString()} label="Pipeline" loading={loading} color="amber"
           onClick={() => setFStatus(fStatus === 'pipeline' ? '' : 'pipeline')} />
         <KpiCard value={formatEur(totalGross)} label="Comm. Lorde" loading={loading} />
@@ -471,7 +471,9 @@ export default function AdminAgentDetail() {
         <select className="filter-select" value={fStatus} onChange={e => setFStatus(e.target.value)}>
           <option value="">Tutti gli stati</option>
           <option value="pipeline">Pipeline</option>
-          <option value="completata">Completata</option>
+          <option value="proposta_accettata">Proposta accettata</option>
+              <option value="incassato">Incassato</option>
+              <option value="terminato">Terminato</option>
         </select>
         <select className="filter-select" value={fType} onChange={e => setFType(e.target.value)}>
           <option value="">Tutti i tipi</option>
@@ -720,6 +722,7 @@ export default function AdminAgentDetail() {
         operation={detailOp}
         onClose={() => setDetailOp(null)}
         onEdit={() => setDetailOp(null)}
+        isAdmin
       />
     </div>
   )

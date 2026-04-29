@@ -56,7 +56,7 @@ export default function AdminOperations() {
       if (dateFrom || dateTo) {
         // Filtro range date applicato solo alle completate (sale_date).
         // Le pipeline restano sempre visibili (sono "current").
-        if (o.status === 'completata') {
+        if (o.status === 'incassato') {
           if (!o.sale_date) return false
           const d = o.sale_date.split('T')[0]
           if (dateFrom && d < dateFrom) return false
@@ -78,7 +78,7 @@ export default function AdminOperations() {
 
   // Pipeline totals from filtered operations
   const filteredPipeline = filtered.filter(o => o.status === 'pipeline')
-  const filteredCompleted = filtered.filter(o => o.status === 'completata')
+  const filteredCompleted = filtered.filter(o => o.status === 'incassato')
 
   const pipelineTotals = useMemo(() => {
     let value = 0, gross = 0, agentComm = 0, agencyRev = 0
@@ -195,7 +195,9 @@ export default function AdminOperations() {
         <select className="filter-select" value={fStatus} onChange={e => { setFStatus(e.target.value); setPage(0) }}>
           <option value="">Tutti gli stati</option>
           <option value="pipeline">Pipeline</option>
-          <option value="completata">Completata</option>
+          <option value="proposta_accettata">Proposta accettata</option>
+              <option value="incassato">Incassato</option>
+              <option value="terminato">Terminato</option>
         </select>
         <button className="btn btn-secondary btn-sm" onClick={() => setShowAdvanced(!showAdvanced)}
           style={{ whiteSpace: 'nowrap' }}>
@@ -355,7 +357,7 @@ export default function AdminOperations() {
                   </td>
                   <td style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatEur(op.final_value || op.property_value || 0)}</td>
                   {(() => {
-                    if (op.status === 'completata') {
+                    if (op.status === 'incassato') {
                       return (
                         <>
                           <td style={{ fontFamily: "'JetBrains Mono', monospace" }}>{op.gross_commission ? formatEur(op.gross_commission) : '—'}</td>
@@ -418,7 +420,13 @@ export default function AdminOperations() {
       <OperationDetailModal open={!!detailOp} operation={detailOp} onClose={() => setDetailOp(null)}
         onEdit={(op) => { setDetailOp(null); setEditingOp(op) }}
         onCloseOp={(op) => { setDetailOp(null); setClosingOp(op) }}
-        onDelete={(id) => { setDetailOp(null); handleDelete(id) }} />
+        onChangeStatus={async (op, newStatus) => {
+          const { error } = await updateOperation(op.id, { status: newStatus })
+          if (error) addToast('Errore nel cambio stato', 'error')
+          else { addToast(`Stato → ${newStatus.replace('_', ' ')}`, 'success'); setDetailOp(null) }
+        }}
+        onDelete={(id) => { setDetailOp(null); handleDelete(id) }}
+        isAdmin />
       <AgentProfileModal open={!!detailAgent} agent={detailAgent} operations={operations}
         onClose={() => setDetailAgent(null)} />
     </div>

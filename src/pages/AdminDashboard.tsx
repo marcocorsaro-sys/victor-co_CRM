@@ -41,7 +41,7 @@ export default function AdminDashboard() {
   const yearStartDate = new Date(selectedYear, 0, 1)
   const yearEndDate = new Date(selectedYear + 1, 0, 1)
 
-  const completed = operations.filter(o => o.status === 'completata')
+  const completed = operations.filter(o => o.status === 'incassato')
   const pipeline = operations.filter(o => o.status === 'pipeline')
   const completedYear = completed.filter(o =>
     o.sale_date && new Date(o.sale_date) >= yearStartDate && new Date(o.sale_date) < yearEndDate
@@ -70,7 +70,7 @@ export default function AdminDashboard() {
   const agentPerf = agents.filter(a => a.active).map(agent => {
     const agentOps = operations.filter(o => o.agent_id === agent.id)
     const agentCompletedYear = agentOps.filter(o =>
-      o.status === 'completata' && o.sale_date &&
+      o.status === 'incassato' && o.sale_date &&
       new Date(o.sale_date) >= yearStartDate && new Date(o.sale_date) < yearEndDate
     )
     const agentPipeline = agentOps.filter(o => o.status === 'pipeline')
@@ -155,7 +155,7 @@ export default function AdminDashboard() {
       </div>
       <div className="kpi-grid">
         <KpiCard value={completedYear.length.toString()} label={`Ops Chiuse ${selectedYear}`} loading={loading}
-          onClick={() => { setFStatus('completata'); setFPeriod('year') }} />
+          onClick={() => { setFStatus('incassato'); setFPeriod('year') }} />
         <KpiCard value={pipeline.length.toString()} label="Ops Pipeline" loading={loading} color="amber"
           onClick={() => { setFStatus('pipeline'); setFPeriod('') }} />
         <KpiCard value={formatEur(totalGrossYear)} label="Comm. Totali" loading={loading}
@@ -297,7 +297,9 @@ export default function AdminDashboard() {
         <select className="filter-select" value={fStatus} onChange={e => setFStatus(e.target.value)}>
           <option value="">Tutti gli stati</option>
           <option value="pipeline">Pipeline</option>
-          <option value="completata">Completata</option>
+          <option value="proposta_accettata">Proposta accettata</option>
+              <option value="incassato">Incassato</option>
+              <option value="terminato">Terminato</option>
         </select>
         <select className="filter-select" value={fPeriod} onChange={e => setFPeriod(e.target.value)}>
           <option value="">Tutto il periodo</option>
@@ -378,6 +380,7 @@ export default function AdminDashboard() {
         operation={detailOp}
         onClose={() => setDetailOp(null)}
         onEdit={() => setDetailOp(null)}
+        isAdmin
       />
       <AgentProfileModal
         open={!!detailAgent}

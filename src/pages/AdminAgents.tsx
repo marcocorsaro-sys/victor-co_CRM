@@ -15,7 +15,7 @@ export default function AdminAgents() {
   const agentStats = useMemo(() => {
     return agents.map(agent => {
       const ops = operations.filter(o => o.agent_id === agent.id)
-      const completed = ops.filter(o => o.status === 'completata')
+      const completed = ops.filter(o => o.status === 'incassato')
       const yearStart = new Date(currentYear, 0, 1)
       const yearEnd = new Date(currentYear + 1, 0, 1)
       const completedYear = completed.filter(o =>

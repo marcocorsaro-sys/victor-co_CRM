@@ -8,7 +8,7 @@ type Props = {
 }
 
 function getYearStats(ops: OperationWithAgent[], year: number) {
-  const completed = ops.filter(o => o.status === 'completata' && o.sale_date && new Date(o.sale_date).getFullYear() === year)
+  const completed = ops.filter(o => o.status === 'incassato' && o.sale_date && new Date(o.sale_date).getFullYear() === year)
   return {
     count: completed.length,
     grossCommission: completed.reduce((s, o) => s + (o.gross_commission || 0), 0),

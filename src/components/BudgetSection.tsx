@@ -44,7 +44,7 @@ export default function BudgetSection({ agents, operations }: Props) {
   const yearStart = new Date(year, 0, 1)
   const yearEnd = new Date(year + 1, 0, 1)
   const completedYTD = operations.filter(o =>
-    o.status === 'completata' && o.sale_date &&
+    o.status === 'incassato' && o.sale_date &&
     new Date(o.sale_date) >= yearStart && new Date(o.sale_date) < yearEnd
   )
 

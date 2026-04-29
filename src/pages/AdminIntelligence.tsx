@@ -45,7 +45,7 @@ export default function AdminIntelligence() {
   const filterByPeriodAndAgent = (ops: OperationWithAgent[], start: Date, end: Date) => {
     return ops.filter(o => {
       if (fAgent && o.agent_id !== fAgent) return false
-      if (o.status === 'completata' && o.sale_date) {
+      if (o.status === 'incassato' && o.sale_date) {
         const d = new Date(o.sale_date)
         if (dateFrom && dateTo) {
           return d >= new Date(dateFrom) && d <= new Date(dateTo)
@@ -96,7 +96,7 @@ export default function AdminIntelligence() {
   // Projection only for current year
   const projResult = useMemo(() => {
     if (!isCurrentYear) return null
-    const filteredCompleted = fAgent ? operations.filter(o => o.status === 'completata' && o.agent_id === fAgent) : operations.filter(o => o.status === 'completata')
+    const filteredCompleted = fAgent ? operations.filter(o => o.status === 'incassato' && o.agent_id === fAgent) : operations.filter(o => o.status === 'incassato')
     const filteredPipeline = fAgent ? operations.filter(o => o.status === 'pipeline' && o.agent_id === fAgent) : operations.filter(o => o.status === 'pipeline')
     return calculateProjectedTrajectory(filteredCompleted, filteredPipeline, agents, selectedYear)
   }, [operations, agents, selectedYear, fAgent, isCurrentYear])

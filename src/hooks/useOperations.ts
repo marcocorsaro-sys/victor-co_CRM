@@ -83,7 +83,7 @@ export function useOperations(agentId?: string) {
         prev.map(op => (op.id === id ? (data as OperationWithAgent) : op))
       )
       const d = data as OperationWithAgent
-      const actionType = updates.status === 'completata' ? 'operation_closed' : 'operation_edited'
+      const actionType = updates.status === 'incassato' ? 'operation_closed' : 'operation_edited'
       logAction(actionType, { property: d.property_name })
     }
     return { data, error }

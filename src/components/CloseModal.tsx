@@ -81,7 +81,7 @@ export default function CloseModal({ open, onClose, onConfirm, operation, agentP
     if (!validate()) return
 
     onConfirm({
-      status: 'completata',
+      status: 'incassato',
       sale_date: saleDate,
       final_value: fv,
       comm_pct_seller: cs,

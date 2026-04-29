@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import type { Profile, Operation } from '../lib/supabase'
 import { useOperations } from '../hooks/useOperations'
+import { useCollaboratedOperations } from '../hooks/useCollaboratedOperations'
 import { useAgentsDirectory } from '../hooks/useAgentsDirectory'
 import { formatEur, formatDate, formatDateTime, estimatePipelineCommission, getPipelineWeight, PIPELINE_FORMULAS } from '../lib/calculations'
 import { exportCsv } from '../lib/exportCsv'
@@ -20,6 +21,7 @@ type Props = {
 
 export default function AgentDashboard({ profile }: Props) {
   const { operations, loading, addOperation, updateOperation, deleteOperation } = useOperations(profile.id)
+  const { operations: collaboratedOps, loading: collabLoading } = useCollaboratedOperations(profile.id)
   const { agents } = useAgentsDirectory()
   const currentYear = new Date().getFullYear()
   const [selectedYear, setSelectedYear] = useState(currentYear)
@@ -45,7 +47,7 @@ export default function AgentDashboard({ profile }: Props) {
   const [showAdvanced, setShowAdvanced] = useState(false)
 
   const pipeline = operations.filter(o => o.status === 'pipeline')
-  const completed = operations.filter(o => o.status === 'completata')
+  const completed = operations.filter(o => o.status === 'incassato')
   const yearStart = new Date(selectedYear, 0, 1)
   const yearEnd = new Date(selectedYear + 1, 0, 1)
   const completedYear = completed.filter(o =>
@@ -124,7 +126,7 @@ export default function AgentDashboard({ profile }: Props) {
       agentComm += o.agent_commission || 0
       collected += o.commission_collected || 0
       collaboratorComm += o.collaborator_commission || 0
-      if (o.status === 'completata') closed++
+      if (o.status === 'incassato') closed++
       else {
         pipelineCount++
         const est = getEstimated(o)
@@ -240,7 +242,7 @@ export default function AgentDashboard({ profile }: Props) {
         <KpiCard value={pipeline.length.toString()} label="In Pipeline" loading={loading}
           onClick={() => setFStatus(fStatus === 'pipeline' ? '' : 'pipeline')} />
         <KpiCard value={completedYear.length.toString()} label={`Chiuse ${selectedYear}`} loading={loading} color="green"
-          onClick={() => setFStatus(fStatus === 'completata' ? '' : 'completata')} />
+          onClick={() => setFStatus(fStatus === 'incassato' ? '' : 'incassato')} />
         <KpiCard value={formatEur(totalCommissions)} label="Provvigioni maturate" loading={loading} color="teal"
           legend={<FormulaTip title="Provvigioni maturate" formula={`Somma delle quote agente delle operazioni chiuse nel ${selectedYear}`} />} />
         <KpiCard value={formatEur(pipelineValue)} label="Valore pipeline" loading={loading} color="amber"
@@ -263,6 +265,77 @@ export default function AgentDashboard({ profile }: Props) {
             note="Scenario realistico ponderato per probabilità di vendita." />} />
       </div>
 
+      {/* ── Le mie collaborazioni ── */}
+      {!collabLoading && collaboratedOps.length > 0 && (
+        <div style={{ marginTop: 20, marginBottom: 20, padding: 16, background: 'var(--s1)', borderRadius: 12, border: '1px solid var(--bd)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ ...mono, fontSize: 11, color: 'var(--ld)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              📎 Le mie collaborazioni ({collaboratedOps.length})
+            </div>
+            <FormulaTip title="Le mie collaborazioni"
+              formula="Operazioni in cui sei collaboratore interno (non principale). La tua quota viene scalata dalla quota dell'agente principale."
+              note="Visibili in lettura grazie alla policy 'agent_collaborator_read'." />
+          </div>
+          <div className="table-wrap">
+            <table style={{ minWidth: 800 }}>
+              <thead>
+                <tr>
+                  <th>Immobile</th>
+                  <th>Agente principale</th>
+                  <th>Stato</th>
+                  <th>Valore</th>
+                  <th>% Coll.</th>
+                  <th>Quota Coll. (stim.)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {collaboratedOps.map(op => {
+                  const principalAgent = (op.profiles as Profile | undefined) || agents.find(a => a.id === op.agent_id)
+                  // Stima quota collaboratore: usa profilo agente principale per calcolare comm. lorda + scalare
+                  const r = principalAgent ? estimatePipelineCommission(op, principalAgent) : null
+                  // Quota collaboratore = quota agente principale (lorda) × pct collaborator
+                  const quotaCollab = r && op.collaborator_comm_pct
+                    ? (r.grossCommission * ((principalAgent!.comm_pct_agent || 50) / 100)) * (op.collaborator_comm_pct / 100)
+                    : op.collaborator_commission || 0
+                  return (
+                    <tr key={op.id}>
+                      <td>
+                        <div className="clickable-cell" style={{ fontWeight: 600 }} onClick={() => setDetailOp(op)}>
+                          {op.property_name}
+                        </div>
+                        {op.address && <div style={{ fontSize: 11, color: 'var(--g)' }}>{op.address}</div>}
+                      </td>
+                      <td>
+                        {principalAgent && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <div className="avatar" style={{ backgroundColor: principalAgent.color, width: 22, height: 22, fontSize: 9 }}>
+                              {principalAgent.initials}
+                            </div>
+                            <span>{principalAgent.full_name}</span>
+                          </div>
+                        )}
+                      </td>
+                      <td><span className={`badge badge-${op.status}`}>{op.status.replace('_', ' ')}</span></td>
+                      <td style={mono}>{formatEur(op.final_value || op.property_value || 0)}</td>
+                      <td style={mono}>{op.collaborator_comm_pct ? `${op.collaborator_comm_pct}%` : '—'}</td>
+                      <td style={{ ...mono, color: 'var(--teal)', fontWeight: 600 }}>
+                        {op.status === 'incassato' && op.collaborator_commission
+                          ? formatEur(op.collaborator_commission)
+                          : quotaCollab > 0 ? `~${formatEur(quotaCollab)}` : '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p style={{ fontSize: 10, color: 'var(--g)', marginTop: 8, marginBottom: 0 }}>
+            * Le quote stimate (in <i>corsivo con ~</i>) si basano sui valori e probabilità dell'operazione.
+            La quota effettiva sarà disponibile alla chiusura.
+          </p>
+        </div>
+      )}
+
       {/* Filtri */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, marginBottom: 8 }}>
         <div className="section-heading" style={{ margin: 0 }}>
@@ -277,7 +350,9 @@ export default function AgentDashboard({ profile }: Props) {
         <select className="filter-select" value={fStatus} onChange={e => setFStatus(e.target.value)}>
           <option value="">Tutti gli stati</option>
           <option value="pipeline">Pipeline</option>
-          <option value="completata">Completata</option>
+          <option value="proposta_accettata">Proposta accettata</option>
+              <option value="incassato">Incassato</option>
+              <option value="terminato">Terminato</option>
         </select>
         <select className="filter-select" value={fType} onChange={e => setFType(e.target.value)}>
           <option value="">Tutti i tipi</option>
@@ -560,7 +635,11 @@ export default function AgentDashboard({ profile }: Props) {
         onClose={() => setDetailOp(null)}
         onEdit={(op) => { setDetailOp(null); setEditingOp(op); setShowOpModal(true) }}
         onCloseOp={(op) => { setDetailOp(null); setClosingOp(op) }}
-        onDelete={(id) => { setDetailOp(null); handleDeleteOp(id) }}
+        onChangeStatus={async (op, newStatus) => {
+          const { error } = await updateOperation(op.id, { status: newStatus })
+          if (error) addToast('Errore nel cambio stato', 'error')
+          else { addToast(`Stato → ${newStatus.replace('_', ' ')}`, 'success'); setDetailOp(null) }
+        }}
       />
     </div>
   )

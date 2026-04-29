@@ -278,9 +278,20 @@ body {
   color: #3b82f6;
 }
 
-.badge-completata {
+.badge-completata,
+.badge-incassato {
   background: rgba(16, 185, 129, 0.15);
   color: var(--green);
+}
+
+.badge-proposta_accettata {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--amber);
+}
+
+.badge-terminato {
+  background: rgba(120, 120, 120, 0.15);
+  color: var(--g);
 }
 
 /* Tabs */

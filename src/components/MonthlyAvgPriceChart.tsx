@@ -17,7 +17,7 @@ export default function MonthlyAvgPriceChart({ operations, year }: Props) {
       new Date(year, i).toLocaleDateString('it-IT', { month: 'short' }).toUpperCase()
     )
 
-    const completed = operations.filter(o => o.status === 'completata' && o.sale_date)
+    const completed = operations.filter(o => o.status === 'incassato' && o.sale_date)
 
     const monthData = Array.from({ length: 12 }, (_, m) => {
       const ops = completed.filter(o => {

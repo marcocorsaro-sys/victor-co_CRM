@@ -186,7 +186,7 @@ export default function ClientDetail() {
             <div>
               <div style={{ fontSize: 10, color: 'var(--g)', textTransform: 'uppercase', marginBottom: 2 }}>Completate</div>
               <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--green)' }}>
-                {linkedOps.filter(o => o.status === 'completata').length}
+                {linkedOps.filter(o => o.status === 'incassato').length}
               </div>
             </div>
             <div>
