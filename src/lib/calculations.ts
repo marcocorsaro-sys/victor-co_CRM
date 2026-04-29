@@ -67,20 +67,28 @@ export type AgentRateLike = {
 /**
  * Central estimator for pipeline commissions.
  * Always passes `opts` so fixed-mode commissions + collaborator share are correct.
- * Returns null if value or agent is missing.
+ *
+ * Returns null if agent is missing, OR if BOTH sides are in % mode and there's
+ * no property_value (impossible to compute). When at least one side is in
+ * fixed mode, can compute even without property_value.
  */
 export function estimatePipelineCommission(op: PipelineOpLike, agent: AgentRateLike | null | undefined): CommissionResult | null {
-  if (!agent || !op.property_value) return null
+  if (!agent) return null
+  const modeS = op.comm_mode_seller || 'pct'
+  const modeB = op.comm_mode_buyer || 'pct'
+  // Senza property_value, possiamo calcolare solo se ALMENO una commissione è fissa.
+  // Se entrambe pct e value mancante → tutto 0, ritorna null perché significherebbe nulla.
+  if (!op.property_value && modeS === 'pct' && modeB === 'pct') return null
   return calculateCommissions(
-    op.property_value,
+    op.property_value || 0,
     op.comm_pct_seller,
     op.comm_pct_buyer,
     op.origin,
     agent.comm_pct_agency,
     agent.comm_pct_agent,
     {
-      commModeSeller: op.comm_mode_seller || 'pct',
-      commModeBuyer: op.comm_mode_buyer || 'pct',
+      commModeSeller: modeS,
+      commModeBuyer: modeB,
       commFixedSeller: op.comm_fixed_seller || 0,
       commFixedBuyer: op.comm_fixed_buyer || 0,
       collaboratorCommPct: op.collaborator_comm_pct || 0,

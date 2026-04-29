@@ -77,7 +77,9 @@ export default function AdminOperations() {
   }
 
   // Pipeline totals from filtered operations
-  const filteredPipeline = filtered.filter(o => o.status === 'pipeline')
+  // Includiamo sia 'pipeline' che 'proposta_accettata' nel "pipeline" totals
+  // (sono entrambe operazioni in corso, non ancora incassate)
+  const filteredPipeline = filtered.filter(o => o.status === 'pipeline' || o.status === 'proposta_accettata')
   const filteredCompleted = filtered.filter(o => o.status === 'incassato')
 
   const pipelineTotals = useMemo(() => {
@@ -90,7 +92,8 @@ export default function AdminOperations() {
         gross += est.grossCommission
         agentComm += est.agentCommission
         agencyRev += est.agencyRevenue
-        const w = getPipelineWeight(op)
+        // Proposta accettata: peso fisso 100% (certa). Pipeline: peso da sale_probability.
+        const w = op.status === 'proposta_accettata' ? 1 : getPipelineWeight(op)
         weightedGross += est.grossCommission * w
         weightedAgentComm += est.agentCommission * w
         weightedAgencyRev += est.agencyRevenue * w

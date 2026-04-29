@@ -48,6 +48,7 @@ export default function AgentDashboard({ profile }: Props) {
 
   const pipeline = operations.filter(o => o.status === 'pipeline')
   const completed = operations.filter(o => o.status === 'incassato')
+  const proposte = operations.filter(o => o.status === 'proposta_accettata')
   const yearStart = new Date(selectedYear, 0, 1)
   const yearEnd = new Date(selectedYear + 1, 0, 1)
   const completedYear = completed.filter(o =>
@@ -68,8 +69,14 @@ export default function AgentDashboard({ profile }: Props) {
     return s + (r ? r.agentCommission * getPipelineWeight(op) : 0)
   }, 0)
 
-  const estimatedTotalYear = totalCommissions + pipelineExpectedAgent
-  const estimatedWeightedYear = totalCommissions + pipelineWeightedAgent
+  // Proposta accettata: peso 100% (certa)
+  const propostaExpectedAgent = proposte.reduce((s, op) => {
+    const r = estimatePipelineCommission(op, profile)
+    return s + (r?.agentCommission || 0)
+  }, 0)
+
+  const estimatedTotalYear = totalCommissions + propostaExpectedAgent + pipelineExpectedAgent
+  const estimatedWeightedYear = totalCommissions + propostaExpectedAgent + pipelineWeightedAgent
 
   const getEstimated = (op: Operation) => estimatePipelineCommission(op, profile)
 
@@ -119,7 +126,8 @@ export default function AgentDashboard({ profile }: Props) {
   const filteredTotals = useMemo(() => {
     let value = 0, gross = 0, agentComm = 0, collected = 0, collaboratorComm = 0
     let estGross = 0, estAgent = 0, weightedGross = 0, weightedAgent = 0
-    let closed = 0, pipelineCount = 0
+    let propostaGross = 0, propostaAgent = 0
+    let closed = 0, pipelineCount = 0, propostaCount = 0
     displayOps.forEach(o => {
       value += o.final_value || o.property_value || 0
       gross += o.gross_commission || 0
@@ -127,7 +135,7 @@ export default function AgentDashboard({ profile }: Props) {
       collected += o.commission_collected || 0
       collaboratorComm += o.collaborator_commission || 0
       if (o.status === 'incassato') closed++
-      else {
+      else if (o.status === 'pipeline') {
         pipelineCount++
         const est = getEstimated(o)
         if (est) {
@@ -137,9 +145,17 @@ export default function AgentDashboard({ profile }: Props) {
           weightedGross += est.grossCommission * w
           weightedAgent += est.agentCommission * w
         }
+      } else if (o.status === 'proposta_accettata') {
+        propostaCount++
+        const est = getEstimated(o)
+        if (est) {
+          propostaGross += est.grossCommission
+          propostaAgent += est.agentCommission
+        }
       }
+      // 'terminato' escluso dai totali
     })
-    return { value, gross, agentComm, collected, collaboratorComm, estGross, estAgent, weightedGross, weightedAgent, closed, pipelineCount }
+    return { value, gross, agentComm, collected, collaboratorComm, estGross, estAgent, weightedGross, weightedAgent, propostaGross, propostaAgent, closed, pipelineCount, propostaCount }
   }, [displayOps, profile])
 
   const hasFilters = !!(search || fStatus || fType || fOrigin || fProbability || fHasCollaborator || fPublishedSite || dateFrom || dateTo)

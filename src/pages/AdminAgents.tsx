@@ -21,7 +21,8 @@ export default function AdminAgents() {
       const completedYear = completed.filter(o =>
         o.sale_date && new Date(o.sale_date) >= yearStart && new Date(o.sale_date) < yearEnd
       )
-      const pipeline = ops.filter(o => o.status === 'pipeline')
+      // Include sia 'pipeline' che 'proposta_accettata' (entrambe operazioni in corso)
+      const pipeline = ops.filter(o => o.status === 'pipeline' || o.status === 'proposta_accettata')
       const grossYear = completedYear.reduce((s, o) => s + (o.gross_commission || 0), 0)
       const agentYear = completedYear.reduce((s, o) => s + (o.agent_commission || 0), 0)
       const pipelineValue = pipeline.reduce((s, o) => s + (o.property_value || 0), 0)

@@ -60,6 +60,11 @@ export default function AdminAgentDetail() {
     [agentOps]
   )
 
+  const propostaOps = useMemo(() =>
+    agentOps.filter(o => o.status === 'proposta_accettata'),
+    [agentOps]
+  )
+
   // Completed KPIs
   const totalGross = completedYear.reduce((s, o) => s + (o.gross_commission || 0), 0)
   const totalAgent = completedYear.reduce((s, o) => s + (o.agent_commission || 0), 0)
@@ -70,22 +75,26 @@ export default function AdminAgentDetail() {
   // Pipeline estimated KPIs (central helper: handles fixed-mode + collaborator share)
   const getEstimated = (op: OperationWithAgent) => estimatePipelineCommission(op, agent)
 
-  const pipelineValue = pipelineOps.reduce((s, o) => s + (o.property_value || 0), 0)
-  const pipelineEstGross = pipelineOps.reduce((s, o) => s + (getEstimated(o)?.grossCommission || 0), 0)
-  const pipelineEstAgent = pipelineOps.reduce((s, o) => s + (getEstimated(o)?.agentCommission || 0), 0)
-  const pipelineEstAgency = pipelineOps.reduce((s, o) => s + (getEstimated(o)?.agencyRevenue || 0), 0)
-  // Weighted: null probability → 50% fallback (consistent with app)
-  const pipelineWeightedGross = pipelineOps.reduce((s, o) => {
+  // Combina pipeline + proposte_accettate per il pannello "Pipeline Stime"
+  // (proposte accettate hanno peso fisso 100% nelle versioni pesate)
+  const allInProgressOps = [...pipelineOps, ...propostaOps]
+  const pipelineValue = allInProgressOps.reduce((s, o) => s + (o.property_value || 0), 0)
+  const pipelineEstGross = allInProgressOps.reduce((s, o) => s + (getEstimated(o)?.grossCommission || 0), 0)
+  const pipelineEstAgent = allInProgressOps.reduce((s, o) => s + (getEstimated(o)?.agentCommission || 0), 0)
+  const pipelineEstAgency = allInProgressOps.reduce((s, o) => s + (getEstimated(o)?.agencyRevenue || 0), 0)
+  // Weighted: null probability → 50% fallback per pipeline; proposte accettate → 100%
+  const weightFor = (op: OperationWithAgent) => op.status === 'proposta_accettata' ? 1 : getPipelineWeight(op)
+  const pipelineWeightedGross = allInProgressOps.reduce((s, o) => {
     const est = getEstimated(o)
-    return s + (est ? est.grossCommission * getPipelineWeight(o) : 0)
+    return s + (est ? est.grossCommission * weightFor(o) : 0)
   }, 0)
-  const pipelineWeightedAgent = pipelineOps.reduce((s, o) => {
+  const pipelineWeightedAgent = allInProgressOps.reduce((s, o) => {
     const est = getEstimated(o)
-    return s + (est ? est.agentCommission * getPipelineWeight(o) : 0)
+    return s + (est ? est.agentCommission * weightFor(o) : 0)
   }, 0)
-  const pipelineWeightedAgency = pipelineOps.reduce((s, o) => {
+  const pipelineWeightedAgency = allInProgressOps.reduce((s, o) => {
     const est = getEstimated(o)
-    return s + (est ? est.agencyRevenue * getPipelineWeight(o) : 0)
+    return s + (est ? est.agencyRevenue * weightFor(o) : 0)
   }, 0)
 
   // Closing rate (year-based: closed in year / (closed + pipeline))
@@ -163,7 +172,8 @@ export default function AdminAgentDetail() {
   const filteredTotals = useMemo(() => {
     let value = 0, gross = 0, agentComm = 0, collected = 0, collaboratorComm = 0
     let estGross = 0, estAgent = 0, weightedGross = 0, weightedAgent = 0
-    let closed = 0, pipelineCount = 0
+    let propostaGross = 0, propostaAgent = 0
+    let closed = 0, pipelineCount = 0, propostaCount = 0
     displayOps.forEach(o => {
       value += o.final_value || o.property_value || 0
       gross += o.gross_commission || 0
@@ -171,7 +181,7 @@ export default function AdminAgentDetail() {
       collected += o.commission_collected || 0
       collaboratorComm += o.collaborator_commission || 0
       if (o.status === 'incassato') closed++
-      else {
+      else if (o.status === 'pipeline') {
         pipelineCount++
         const est = getEstimated(o)
         if (est) {
@@ -181,9 +191,16 @@ export default function AdminAgentDetail() {
           weightedGross += est.grossCommission * w
           weightedAgent += est.agentCommission * w
         }
+      } else if (o.status === 'proposta_accettata') {
+        propostaCount++
+        const est = getEstimated(o)
+        if (est) {
+          propostaGross += est.grossCommission
+          propostaAgent += est.agentCommission
+        }
       }
     })
-    return { value, gross, agentComm, collected, collaboratorComm, estGross, estAgent, weightedGross, weightedAgent, closed, pipelineCount }
+    return { value, gross, agentComm, collected, collaboratorComm, estGross, estAgent, weightedGross, weightedAgent, propostaGross, propostaAgent, closed, pipelineCount, propostaCount }
   }, [displayOps, agent])
 
   const hasFilters = !!(search || fStatus || fType || fOrigin || fProbability || fHasCollaborator || fPublishedSite || dateFrom || dateTo)

@@ -8,7 +8,8 @@ type Props = {
 }
 
 export default function ForecastCard({ operations, agents }: Props) {
-  const pipeline = operations.filter(o => o.status === 'pipeline')
+  // Include sia pipeline che proposta_accettata (entrambi "in corso")
+  const pipeline = operations.filter(o => o.status === 'pipeline' || o.status === 'proposta_accettata')
 
   const totalPipelineValue = pipeline.reduce((s, o) => s + (o.property_value || 0), 0)
 

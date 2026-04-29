@@ -43,6 +43,7 @@ export default function AdminDashboard() {
 
   const completed = operations.filter(o => o.status === 'incassato')
   const pipeline = operations.filter(o => o.status === 'pipeline')
+  const proposte = operations.filter(o => o.status === 'proposta_accettata')
   const completedYear = completed.filter(o =>
     o.sale_date && new Date(o.sale_date) >= yearStartDate && new Date(o.sale_date) < yearEndDate
   )
@@ -60,12 +61,20 @@ export default function AdminDashboard() {
     return { agentId: op.agent_id, gross, weight, weightedGross: gross * weight }
   })
 
+  // Proposte accettate: peso 100% (certe), separate da pipeline
+  const proposteCommEstimates = proposte.map(op => {
+    const agent = agents.find(a => a.id === op.agent_id)
+    const r = estimatePipelineCommission(op, agent)
+    return { agentId: op.agent_id, gross: r?.grossCommission || 0 }
+  })
+
   const pipelineExpectedGross = pipelineCommEstimates.reduce((s, e) => s + e.gross, 0)
   const pipelineWeightedGross = pipelineCommEstimates.reduce((s, e) => s + e.weightedGross, 0)
-  // Stima totale = chiuse + pipeline intera (scenario ottimistico, tutto chiude)
-  const estimatedTotalYear = totalGrossYear + pipelineExpectedGross
-  // Stima pesata = chiuse + pipeline pesata per sale_probability (scenario realistico)
-  const estimatedWeightedYear = totalGrossYear + pipelineWeightedGross
+  const proposteGross = proposteCommEstimates.reduce((s, e) => s + e.gross, 0)
+  // Stima totale = chiuse + proposte (certe) + pipeline intera (ottimistico)
+  const estimatedTotalYear = totalGrossYear + proposteGross + pipelineExpectedGross
+  // Stima pesata = chiuse + proposte (100%) + pipeline pesata (realistico)
+  const estimatedWeightedYear = totalGrossYear + proposteGross + pipelineWeightedGross
 
   const agentPerf = agents.filter(a => a.active).map(agent => {
     const agentOps = operations.filter(o => o.agent_id === agent.id)
@@ -74,29 +83,36 @@ export default function AdminDashboard() {
       new Date(o.sale_date) >= yearStartDate && new Date(o.sale_date) < yearEndDate
     )
     const agentPipeline = agentOps.filter(o => o.status === 'pipeline')
+    const agentProposte = agentOps.filter(o => o.status === 'proposta_accettata')
     const totalComm = agentCompletedYear.reduce((s, o) => s + (o.gross_commission || 0), 0)
     const agentComm = agentCompletedYear.reduce((s, o) => s + (o.agent_commission || 0), 0)
     const agencyComm = totalComm - agentComm
-    const closingRate = agentOps.length > 0 ? (agentCompletedYear.length / (agentCompletedYear.length + agentPipeline.length)) * 100 : 0
+    const closingRate = agentOps.length > 0 ? (agentCompletedYear.length / (agentCompletedYear.length + agentPipeline.length + agentProposte.length)) * 100 : 0
     const pipelineGross = pipelineCommEstimates
       .filter(e => e.agentId === agent.id)
       .reduce((s, e) => s + e.gross, 0)
     const pipelineWeighted = pipelineCommEstimates
       .filter(e => e.agentId === agent.id)
       .reduce((s, e) => s + e.weightedGross, 0)
-    const estimatedTotal = totalComm + pipelineGross
-    const estimatedWeighted = totalComm + pipelineWeighted
-    return { agent, closed: agentCompletedYear.length, pipeline: agentPipeline.length, totalComm, agentComm, agencyComm, closingRate, pipelineGross, pipelineWeighted, estimatedTotal, estimatedWeighted }
+    const propostaGross = proposteCommEstimates
+      .filter(e => e.agentId === agent.id)
+      .reduce((s, e) => s + e.gross, 0)
+    // Include sempre proposte come "certe" (100%) + pipeline (intera o pesata)
+    const estimatedTotal = totalComm + propostaGross + pipelineGross
+    const estimatedWeighted = totalComm + propostaGross + pipelineWeighted
+    return { agent, closed: agentCompletedYear.length, pipeline: agentPipeline.length, proposte: agentProposte.length, totalComm, agentComm, agencyComm, closingRate, pipelineGross, pipelineWeighted, propostaGross, estimatedTotal, estimatedWeighted }
   })
 
   const perfTotals = {
     closed: agentPerf.reduce((s, p) => s + p.closed, 0),
     pipeline: agentPerf.reduce((s, p) => s + p.pipeline, 0),
+    proposte: agentPerf.reduce((s, p) => s + p.proposte, 0),
     totalComm: agentPerf.reduce((s, p) => s + p.totalComm, 0),
     agentComm: agentPerf.reduce((s, p) => s + p.agentComm, 0),
     agencyComm: agentPerf.reduce((s, p) => s + p.agencyComm, 0),
     pipelineGross: agentPerf.reduce((s, p) => s + p.pipelineGross, 0),
     pipelineWeighted: agentPerf.reduce((s, p) => s + p.pipelineWeighted, 0),
+    propostaGross: agentPerf.reduce((s, p) => s + p.propostaGross, 0),
     estimatedTotal: agentPerf.reduce((s, p) => s + p.estimatedTotal, 0),
     estimatedWeighted: agentPerf.reduce((s, p) => s + p.estimatedWeighted, 0),
   }

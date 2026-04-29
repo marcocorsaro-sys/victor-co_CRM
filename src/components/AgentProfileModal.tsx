@@ -44,7 +44,7 @@ export default function AgentProfileModal({ open, agent, operations, onClose }: 
   })
 
   const opsChiuse = currentYearOps.filter(op => op.status === 'incassato')
-  const opsPipeline = currentYearOps.filter(op => op.status === 'pipeline')
+  const opsPipeline = currentYearOps.filter(op => op.status === 'pipeline' || op.status === 'proposta_accettata')
   const commissioniTotali = opsChiuse.reduce((sum, op) => sum + (op.gross_commission || 0), 0)
   const provvigioniAgente = opsChiuse.reduce((sum, op) => sum + (op.agent_commission || 0), 0)
 

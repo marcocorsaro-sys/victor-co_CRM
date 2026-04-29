@@ -47,6 +47,9 @@ export default function OperationsTotalsFooter({ operations, resolveAgent, yearL
   let pipelineGross = 0
   let pipelineWeighted = 0
   let pipelineCount = 0
+  // Proposta accettata = soldi attesi quasi certi (peso 100%), separati da pipeline
+  let propostaGross = 0
+  let propostaCount = 0
 
   operations.forEach(op => {
     if (op.status === 'incassato') {
@@ -64,10 +67,18 @@ export default function OperationsTotalsFooter({ operations, resolveAgent, yearL
       pipelineGross += est.grossCommission
       pipelineWeighted += est.grossCommission * getPipelineWeight(op)
       pipelineCount++
+    } else if (op.status === 'proposta_accettata') {
+      const agent = resolveAgent(op)
+      const est = estimatePipelineCommission(op, agent)
+      if (!est) return
+      propostaGross += est.grossCommission
+      propostaCount++
     }
+    // 'terminato' → escluso da tutti i totali (mandato chiuso senza incasso)
   })
 
-  const totalCompletedPlusWeighted = completedGross + pipelineWeighted
+  // Stima totale realistica = incassate + proposte accettate (certe) + pipeline pesate
+  const totalCompletedPlusWeighted = completedGross + propostaGross + pipelineWeighted
 
   const cellStyle: React.CSSProperties = {
     padding: '12px 16px',
@@ -114,6 +125,16 @@ export default function OperationsTotalsFooter({ operations, resolveAgent, yearL
       </div>
       <div style={cellStyle}>
         <div style={labelStyle}>
+          <span>Tot. Proposte Accettate</span>
+          <FormulaTip title="Tot. Proposte Accettate"
+            formula="Σ stima lorda delle ops in stato 'proposta accettata' (proposta firmata, soldi non ancora incassati)"
+            note="Considerate certe al 100% nelle proiezioni." />
+        </div>
+        <div style={{ ...valueStyle, color: 'var(--amber)' }}>{formatEur(propostaGross)}</div>
+        <div style={countStyle}>{propostaCount} {propostaCount === 1 ? 'operazione' : 'operazioni'}</div>
+      </div>
+      <div style={cellStyle}>
+        <div style={labelStyle}>
           <span>Tot. Pipeline (100%)</span>
           <FormulaTip title="Tot. Pipeline (100%)"
             formula={PIPELINE_FORMULAS.pipelineGross}
@@ -134,13 +155,13 @@ export default function OperationsTotalsFooter({ operations, resolveAgent, yearL
       </div>
       <div style={cellStyle}>
         <div style={labelStyle}>
-          <span>Tot. Completate + Pesate {year}</span>
-          <FormulaTip title={`Tot. Completate + Pesate ${year}`}
-            formula={`(${completedLbl}) + (Tot. Pipeline Pesate ${year})`}
-            note="Scenario realistico: completate effettive + stima pipeline ponderata." />
+          <span>Tot. Stima {year}</span>
+          <FormulaTip title={`Tot. Stima ${year}`}
+            formula={`(${completedLbl}) + (Proposte Accettate × 100%) + (Pipeline × probabilità)`}
+            note="Scenario realistico: incassi effettivi + proposte certe + pipeline ponderate per probabilità." />
         </div>
         <div style={{ ...valueStyle, color: 'var(--green)' }}>{formatEur(totalCompletedPlusWeighted)}</div>
-        <div style={countStyle}>{completedCount + pipelineCount} {completedCount + pipelineCount === 1 ? 'operazione' : 'operazioni'} totali</div>
+        <div style={countStyle}>{completedCount + propostaCount + pipelineCount} {completedCount + propostaCount + pipelineCount === 1 ? 'operazione' : 'operazioni'} totali</div>
       </div>
     </div>
   )
